@@ -325,7 +325,8 @@
     };
     const faces = activeModel.parts.flatMap(part => part.faces.map(vertices => {
       const projected = vertices.map(project);
-      const meanDepth = projected.reduce((sum, p) => sum + p[2], 0) / vertices.length;
+      const stations = vertices.map(p => p[1]);
+      const bandCentreY = (Math.min(...stations) + Math.max(...stations)) / 2;
       // A normal from the polygon as a whole also handles collinear first edges.
       const normal = [0, 0, 0];
       vertices.forEach((a, i) => {
@@ -337,7 +338,7 @@
       const magnitude = Math.hypot(...normal);
       const light = (normal[2] - normal[0] * 0.5 + normal[1] * 0.2) / (magnitude || 1);
       const facing = normal[0] * cosPitch * sinYaw + normal[1] * cosPitch * cosYaw + normal[2] * sinPitch;
-      return { vertices, projected, meanDepth, light, facing, normal: normal.map(c => c / magnitude) };
+      return { vertices, projected, bandCentreY, light, facing, normal: normal.map(c => c / magnitude) };
     }));
     const map = fit(faces.flatMap(f => f.projected), { x: 75, y: 73, w: 610, h: 312 });
     const edgeKey = (a, b) => [a.join(','), b.join(',')].sort().join('|');
@@ -349,7 +350,12 @@
         normalsByEdge.get(key).push(face.normal);
       });
     }
-    const visible = faces.filter(f => f.facing > 1e-8).sort((a, b) => a.meanDepth - b.meanDepth);
+    // meshOf produces convex bands between consecutive Y stations. Front-facing
+    // surfaces of one band only meet at edges. Where bands overlap on screen,
+    // a sight ray crosses them in Y order, with a step wall at the shared station.
+    const towardIncreasingY = cosPitch * cosYaw;
+    const visible = faces.filter(f => f.facing > 1e-8)
+      .sort((a, b) => (a.bandCentreY - b.bandCentreY) * towardIncreasingY);
     const solids = visible.map(f => {
       const light = 27 + 40 * (1 - f.light) / 2;
       const corners = f.projected.map(map);
@@ -420,7 +426,7 @@
     return items;
   }
 
-  function sheet(state, model, planDrawing, sectionDrawing) {
+  function sheet(state, model, planDrawing, sectionDrawing, drainWarning) {
     const row = (name, value) => '<div><dt>' + escape(name) + '</dt><dd>' + escape(value) + '</dd></div>';
     const figure = (title, content, notes) =>
       '<figure><figcaption>' + escape(title) + '</figcaption><svg viewBox="0 0 760 440" class="pc-drawing" role="img" aria-label="' +
@@ -470,7 +476,8 @@
       figure('Bovenaanzicht', planDrawing, planKeys || 'A–A geeft de plaats van de doorsnede aan.') +
       figure('Doorsnede A–A', sectionDrawing, 'X = ' + number(state.length / 2, 1) + ' mm vanaf links. Y = 0 aan gevel. Z = 0 op het doorgetrokken loopvlak aan de gevel.') +
       '</div><dl>' + fields.map(([key, value]) => row(key, value)).join('') +
-      '</dl>' + positionNote + profileNote + '<footer><strong>Open voor engineering</strong> · wapening, opleg- en ankerdetails, hijspunten en posities van de instortdelen.</footer>';
+      '</dl>' + positionNote + (drainWarning ? '<p class="pc-print-detail"><strong>' + escape(drainWarning) + '</strong></p>' : '') +
+      profileNote + '<footer><strong>Open voor engineering</strong> · wapening, opleg- en ankerdetails, hijspunten en posities van de instortdelen.</footer>';
   }
 
   function render(state, model, view = 'plan') {
@@ -492,8 +499,12 @@
     const key = document.getElementById('legend');
     key.hidden = false;
     key.innerHTML = legend(state, view);
+    const drainWarning = model.lowLipWarningMm == null ? '' :
+      'Let op, de buitenlip van de goot ligt ' + number(model.lowLipWarningMm,4) + ' mm lager dan het HWA-punt. Water kan over de lip aflopen.';
+    const warning = document.getElementById('drain-warning');
+    if (warning.textContent !== drainWarning) warning.textContent = drainWarning;
     document.getElementById('print-sheet').innerHTML = sheet(state, model,
-      planDrawing.replaceAll('pc-plan-finish', 'pc-paper-finish'), sectionDrawing.replaceAll('pc-section-hatch', 'pc-paper-hatch'));
+      planDrawing.replaceAll('pc-plan-finish', 'pc-paper-finish'), sectionDrawing.replaceAll('pc-section-hatch', 'pc-paper-hatch'), drainWarning);
   }
 
   window.PrecastDrawings = Object.freeze({ render });

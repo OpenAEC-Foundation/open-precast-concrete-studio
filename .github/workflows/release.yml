@@ -64,15 +64,21 @@ jobs:
             throw 'Unexpected gsudo package checksum.'
           }
           Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $env:RUNNER_TEMP 'gsudo')
-      - name: Fetch the published installer for the upgrade test
+      - name: Fetch the published 0.4.1 and 0.5.0 installers for the upgrade tests
         shell: pwsh
         run: |
-          $previous = Join-Path $env:RUNNER_TEMP 'open-precast-0.4.1-setup.exe'
-          Invoke-WebRequest 'https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/releases/download/v0.4.1/Open-Precast-Concrete-Studio-0.4.1-windows-x64-setup.exe' -OutFile $previous
-          if ((Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash -ne '30dbaf2449f9f0bb3e269df283dad090485448d8a27e0fc1c51ab781c0122695') {
-            throw 'Previous Windows installer checksum mismatch.'
+          $checksums = @{
+            '0.4.1' = '30dbaf2449f9f0bb3e269df283dad090485448d8a27e0fc1c51ab781c0122695'
+            '0.5.0' = '2fc9983d93ca3a2abcca7bbcc5e5671cbb60c75cbff8f39cb5162b8e05246f5f'
           }
-      - name: Upgrade a locally drawn balcony and verify its drainage and IFC export
+          foreach ($version in $checksums.Keys) {
+            $previous = Join-Path $env:RUNNER_TEMP "open-precast-$version-setup.exe"
+            Invoke-WebRequest "https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/releases/download/v$version/Open-Precast-Concrete-Studio-$version-windows-x64-setup.exe" -OutFile $previous
+            if ((Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash -ne $checksums[$version]) {
+              throw "Unexpected checksum for the $version Windows installer."
+            }
+          }
+      - name: Upgrade saved balconies and recover unsaved edits after running both older versions
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.number }}
@@ -89,9 +95,12 @@ jobs:
           icacls $output.FullName /grant:r "*${userSid}:(OI)(CI)M"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the test account access to its output directory.' }
           $gsudo = (Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'gsudo/x64/gsudo.exe')).FullName
-          $previous = Join-Path $env:RUNNER_TEMP 'open-precast-0.4.1-setup.exe'
-          & $gsudo --direct --wait --integrity Medium $python $test $installer --upgrade-from $previous --output $output.FullName
-          if ($LASTEXITCODE -ne 0) { throw "Installed-app test exited with code $LASTEXITCODE." }
+          foreach ($version in @('0.4.1','0.5.0')) {
+            $previous = Join-Path $env:RUNNER_TEMP "open-precast-$version-setup.exe"
+            $evidence = Join-Path $output.FullName "from-$version"
+            & $gsudo --direct --wait --integrity Medium $python $test $installer --upgrade-from $previous --output $evidence
+            if ($LASTEXITCODE -ne 0) { throw "Upgrade test from $version exited with code $LASTEXITCODE." }
+          }
       - name: Preserve the IFC and screenshot from the installed app
         uses: actions/upload-artifact@v7
         with:

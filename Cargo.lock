@@ -2296,7 +2296,7 @@ dependencies = [
 
 [[package]]
 name = "open-precast-concrete-studio"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "open",
  "rfd",

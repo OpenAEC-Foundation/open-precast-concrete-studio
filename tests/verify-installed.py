@@ -259,6 +259,36 @@ def check_feedback(page):
         page.context.unroute("**/*", intercept)
 
 
+def exercise_older_version(page):
+    page.locator("#mark").fill("BP-OUD")
+    page.locator("#length").fill("4250")
+    assert "lokaal bewaard" in page.locator("#status").inner_text()
+
+
+def export_restored_revision(page, pid, folder):
+    assert page.locator("#mark").input_value() == "BP-LOKAAL"
+    with page.expect_file_chooser() as chooser:
+        page.locator("#open-project").click()
+    chooser.value.set_files(folder / (MARK + ".opc.json"))
+    page.get_by_text(f"Geopend · {MARK}.opc.json", exact=True).wait_for()
+    assert page.locator("#mark").input_value() == MARK
+
+    page.locator("#drafts summary").click()
+    drafts = page.locator("#draft-list")
+    for mark, length in [("BP-OUD", "4250"), ("BP-LOKAAL", "3140")]:
+        option = drafts.locator("option").filter(has_text=mark).first
+        drafts.select_option(value=option.get_attribute("value"))
+        page.locator("#restore-draft").click()
+        assert page.locator("#mark").input_value() == mark
+        assert page.locator("#length").input_value() == length
+    assert page.locator("#channelProfile").input_value() == "rect"
+    assert page.locator("#dripGroove").is_checked()
+    target = folder / "BP-LOKAAL.ifc"
+    page.locator("#export-ifc").click()
+    save_dialog(pid, target)
+    page.get_by_text("IFC-bestand opgeslagen", exact=True).wait_for()
+
+
 def exercise(executable, folder, profile, phase):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
@@ -282,9 +312,19 @@ def exercise(executable, folder, profile, phase):
                                   wait_until="commit", timeout=30000)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            draw_and_save(page, process.pid, folder, phase)
-            if phase != "baseline":
-                check_feedback(page)
+            if phase == "rollback":
+                exercise_older_version(page)
+            elif phase == "restored":
+                export_restored_revision(page, process.pid, folder)
+            else:
+                draw_and_save(page, process.pid, folder, phase)
+                if phase != "baseline":
+                    check_feedback(page)
+                if phase == "upgraded":
+                    # These edits exist only in the current app's working copy.
+                    page.locator("#mark").fill("BP-LOKAAL")
+                    page.locator("#length").fill("3140")
+                    assert page.locator("#volume-value").inner_text() == "0,674 m³"
             assert not errors, errors
     finally:
         if process.poll() is None:
@@ -355,6 +395,18 @@ def install(installer, destination, version=None):
     return executable, installed_version
 
 
+def verify_restored_export(folder, original_id):
+    model = ifcopenshell.open(str(folder / "BP-LOKAAL.ifc"))
+    slab, = model.by_type("IfcSlab")
+    assert slab.Tag == "BP-LOKAAL"
+    assert slab.GlobalId == ifcopenshell.guid.compress(original_id.replace("-", ""))
+    expected = .644070 * 3140 / 3000
+    geometry = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), slab)
+    assert math.isclose(shape.get_volume(geometry.geometry), expected, abs_tol=1e-9)
+    assert math.isclose(element.get_pset(slab, "Qto_SlabBaseQuantities")["NetVolume"], expected, abs_tol=1e-9)
+    print(f"Restored unsaved BP-LOKAAL with its original identity and {expected:.9f} m3", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("installer", type=Path)
@@ -378,17 +430,26 @@ def main():
                 baseline.mkdir()
                 executable, old_version = install(args.upgrade_from.resolve(strict=True), destination)
                 assert old_version != version, f"The baseline installer also has version {version}"
+                previous_build = folder / "previous-version"
+                previous_build.mkdir()
+                previous_executable = previous_build / BINARY
+                shutil.copy2(executable, previous_executable)
                 exercise(executable, baseline, profile, "baseline")
                 original_id = measure(baseline, False)
             executable, _ = install(installer, destination, version)
             exercise(executable, folder, profile, "upgraded" if original_id else "fresh")
             measure(folder, True, original_id)
+            if args.upgrade_from:
+                exercise(previous_executable, folder, profile, "rollback")
+                exercise(executable, folder, profile, "restored")
+                verify_restored_export(folder, original_id)
             if args.output:
                 args.output.mkdir(exist_ok=True, parents=True)
                 for extension in (".ifc", ".opc.json", ".png"):
                     shutil.copy2(folder / (MARK + extension), args.output)
                 if args.upgrade_from:
                     shutil.copytree(baseline, args.output / "before-upgrade", dirs_exist_ok=True)
+                    shutil.copy2(folder / "BP-LOKAAL.ifc", args.output)
         finally:
             if uninstaller.is_file():
                 run_nsis(uninstaller, ["/S"], "_?=" + str(destination))

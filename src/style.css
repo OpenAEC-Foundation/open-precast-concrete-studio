@@ -1,5 +1,7 @@
 *{box-sizing:border-box}
 .field-note{font-size:12px;color:var(--oa-text-secondary);padding-left:8px;border-left:2px solid var(--oa-accent)}
+#drain-warning{margin:0}
+#drain-warning:not(:empty){margin:8px 0;padding:6px 8px;border-left:3px solid var(--warning);font-size:13px;font-weight:600}
 #edge-fields{display:grid;gap:8px} select:disabled,input:disabled{opacity:.72;cursor:default}
 :root {
   --app:var(--oa-frame);--panel:var(--oa-panel);--panel-soft:var(--oa-hover);--ink:var(--oa-text);--muted:var(--oa-text-secondary);

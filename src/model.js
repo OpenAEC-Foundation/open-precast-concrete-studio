@@ -291,6 +291,15 @@
       drain:state.drain ? reservation(drainRow,state.drainPosition/100) : null,
       railing:state.railing ? [0.1,0.5,0.9].map(fraction => reservation(far,fraction)) : []
     };
+    let lowLipWarningMm = null;
+    if (reservations.drain && channelBands.length) {
+      const channelEnd = channelBands.at(-1).b;
+      // The outer face of a rectangular groove rises to the adjacent walking surface.
+      // A groove cut to the free edge ends at its actual floor without that rise.
+      const lip = bands.find(band => band.a.y === channelEnd.y)?.a ?? channelEnd;
+      const difference = reservations.drain[2] - lip.top;
+      if (difference > geometryTolerance) lowLipWarningMm = difference;
+    }
     const measured = thicknessMode === 'reference';
     return {
       state, outline, upstandOutline:footprint(bands.filter(b => b.raised)),
@@ -300,7 +309,7 @@
       endThicknessMm:[near.top-near.bottom,far.top-far.bottom],
       baseThicknessMm:measured ? [109.2,65] : [thickness,thicknessMode === 'linear' ? state.freeThickness : thickness],
       referenceFeatures:measured ? referenceFeatures.map(feature => ({...feature})) : [],
-      parts:[{id:'slab', faces:meshOf(bands)}], reservations,
+      parts:[{id:'slab', faces:meshOf(bands)}], reservations, lowLipWarningMm,
       areaM2:planArea(outline)/1e6,
       upstandVolumeM3:integratedVolume(bands,r => r.upstand),
       edgeVolumeM3:integratedVolume(bands,r => r.edgeDrop),

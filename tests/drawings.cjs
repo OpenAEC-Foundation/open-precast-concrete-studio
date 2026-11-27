@@ -152,6 +152,31 @@ async function main() {
     const pdf = await page.pdf({preferCSSPageSize:true, printBackground:true});
     const pages = pdf.toString('latin1').match(/\/Type\s*\/Page\b/g);
     assert.equal(pages?.length,1);
+    await page.emulateMedia({media:null});
+    await select('thicknessMode','constant');
+    await select('channelProfile','v');
+    await set('slope',2);
+    await set('channelWidth',300);
+    await set('channelDepth',2);
+    const warning = page.locator('#drain-warning');
+    for (const supplier of ['generic','omg','vebo']) {
+      await select('supplier',supplier);
+      assert.match(await warning.innerText(), /buitenlip van de goot ligt 1 mm lager dan het HWA-punt/);
+      assert.ok((await page.locator('#print-sheet').textContent()).includes(await warning.innerText()));
+      assert.ok(await page.locator('#export-ifc').isEnabled());
+      assert.ok(await page.locator('#save-project').isEnabled());
+    }
+    const warningSheet = await page.pdf({preferCSSPageSize:true, printBackground:true});
+    assert.equal(warningSheet.toString('latin1').match(/\/Type\s*\/Page\b/g)?.length,1, 'Waarschuwing past op het elementblad');
+    await set('channelDepth',3);
+    assert.equal(await warning.textContent(),'');
+    assert.doesNotMatch(await page.locator('#print-sheet').textContent(),/lager dan het HWA-punt/);
+    await set('channelDepth',2);
+    await page.uncheck('#drain');
+    assert.equal(await warning.textContent(),'');
+    await page.check('#drain');
+    await set('channelDepth',0);
+    assert.equal(await warning.textContent(),'');
     assert.deepEqual(errors,[]);
     console.log('Edge: doorsneden, planstroken en HWA-positie nagemeten op scherm en A4 voor drie plattegronden, rechte en V-goten, waterhol, randen en referentiebalkon.');
   } finally { await browser.close(); }

@@ -14,6 +14,7 @@
   <script src="src/profiles.js" defer></script>
   <script src="src/ifc.js" defer></script>
   <script src="src/drawings.js" defer></script>
+  <script src="src/drafts.js" defer></script>
   <script src="src/app.js" defer></script>
   <script src="src/feedback-config.js" defer></script>
   <script src="src/feedback.js" defer></script>
@@ -37,6 +38,11 @@
   <main class="workspace">
     <aside class="properties">
       <h2>Element ontwerpen</h2>
+      <details class="notes" id="drafts"><summary>Werkversies</summary>
+        <label>Op dit apparaat<select id="draft-list"></select></label>
+        <button type="button" id="restore-draft">Heropenen</button>
+        <button type="button" id="export-draft">Kopie opslaan</button>
+      </details>
       <form id="parameters" novalidate>
         <div class="field-pair"><label>Elementmerk<input id="mark" maxlength="80" required value="BP-01"></label><label>Bouwlaag<input id="storey" maxlength="80" required value="01"></label></div>
         <label>Elementtype<select id="element-type"><option value="balcony">Balkonplaat</option><option value="gallery">Galerijplaat</option></select></label>
@@ -106,6 +112,7 @@
         <div><dt>Dikte gevel / vrije rand</dt><dd id="end-values">—</dd></div>
       </dl>
       <p id="drain-coordinates" class="field-note" hidden></p>
+      <p id="drain-warning" role="status" aria-atomic="true"></p>
       <section class="profile"><h3>Fabrikantprofiel</h3>
         <label class="only-reader" for="supplier">Fabrikantprofiel</label><select id="supplier"><option value="generic">Generiek</option><option value="olbecon">Olbecon</option><option value="vebo">Vebo</option><option value="omg">OMG Prefabbeton</option></select>
         <p id="profile-caption"></p><ul id="profile-checks"></ul><a id="profile-source" target="_blank" rel="noreferrer" hidden>Productspecificatie ↗</a>

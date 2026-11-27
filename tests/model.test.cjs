@@ -390,6 +390,30 @@ test('smalle strook tussen gootlip en randsprong behoudt meetbare IFC-zijvlakken
   }
 });
 
+test('waarschuwing vergelijkt de buitenlip van de goot met het HWA-punt', () => {
+  const shallow = {...base, depth:1800, slope:2, channelWidth:300, channelDepth:2, channelInset:50};
+  for (const shape of ['rectangle','chamfer','trapezoid']) {
+    for (const channelProfile of ['v','rect']) {
+      const state = {...shallow, shape, channelProfile};
+      const model = build(state);
+      close(model.reservations.drain[2], -34, 'HWA op de gootbodem');
+      const lipTop = Math.max(...model.sectionRing.filter(([y]) => y === 1750).map(([,z]) => z));
+      close(lipTop, -35, 'Bovenzijde buitenlip');
+      close(model.lowLipWarningMm, 1, 'Buitenlip lager dan HWA');
+      for (const change of [{channelDepth:3}, {channelDepth:3.1}, {slope:0}, {drain:false},
+                             {channelProfile:'none'}, {channelDepth:2.99995}]) {
+        assert.equal(build({...state,...change}).lowLipWarningMm, null);
+      }
+      close(build({...state,drainPosition:0,upstand:true}).lowLipWarningMm, 1, 'HWA links');
+      close(build({...state,drainPosition:100}).lowLipWarningMm, 1, 'HWA rechts');
+    }
+  }
+  // At zero inset the rectangular cut opens out at the free edge. A 10 mm
+  // deep channel then retains the full 3 mm centre-to-edge fall of its floor.
+  close(build({...shallow,channelProfile:'rect',channelDepth:10,channelInset:0}).lowLipWarningMm, 3, 'Open uiteinde');
+  assert.equal(build({...shallow,channelProfile:'rect',channelDepth:10}).lowLipWarningMm, null);
+});
+
 test('ongeldige waterdetails en onderbroken doorsneden worden geweigerd', () => {
   for (const patch of [
     {channelProfile:'round'}, {dripGroove:'yes'}, {channelWidth:0},{channelDepth:-1},

@@ -28,6 +28,8 @@ Kies bij **Afwatering** een rechthoekige langsgoot of een V-goot in het loopvlak
 
 Met **HWA-reservering** plaats je het hart van een toekomstige afvoer op de gootbodem. Zonder langsgoot ligt het punt op de vrije rand. De invoer loopt van 0% links tot 100% rechts op de plaatselijke plaatbreedte. Tekening en IFC geven de coördinaten door. Voor een fysieke doorvoer kies je bij de verdere engineering een afvoerpot en bijbehorende sparingsmaat. Het gemeten Hi-Con-profiel bevat zijn eigen waterhol.
 
+De editor vergelijkt de hoogte van de buitenlip van de goot met die van de HWA-reservering. Bij een V-goot van 300 mm breed en 2 mm diep op een loopvlak met 2% afschot ligt de buitenlip 1 mm lager dan de HWA. Dit hoogteverschil verschijnt bij de elementgegevens en op het elementblad. Je kunt het ontwerp verder bewerken en exporteren.
+
 Voorbeeld GP-A01 is een galerijplaat van 3.600 × 1.800 mm met een langsgoot van 120 × 20 mm en een waterhol van 16 × 8 mm. De twee uitsparingen nemen samen 8,8704 liter beton weg. Het netto volume is 1,0765296 m³. [Elementblad](examples/GP-A01.pdf) · [IFC4](examples/GP-A01.ifc) · [Fabrikantdetails en metingen aan 3D-bestanden](docs/afwatering.md)
 
 ## Fabrikantprofielen en BIM
@@ -41,7 +43,9 @@ Voorbeeld GP-A01 is een galerijplaat van 3.600 × 1.800 mm met een langsgoot van
 
 **Exporteer IFC4** schrijft één gesloten betonlichaam als `IfcSlab/FLOOR`, in een bouwlaag met de ingevoerde naam. Het bestand bevat materiaal, lokale plaatsing, projectieoppervlak, betonvolume en indicatieve massa. Het peil is lokaal. Na heropenen van het ontwerp of een maatrevisie houdt het element dezelfde IFC-identiteit.
 
-**Opslaan** bewaart de instellingen in ontwerpformaat 0.4 als bewerkbaar `.opc.json`-bestand. De app herstelt het laatste lokaal bewaarde concept bij opnieuw openen. Bestanden uit de Windows-app 0.4.1 (ontwerpformaat 0.3) behouden de bestaande doorsnede en IFC-identiteit. Dat geldt ook voor ontwerpen met constante dikte uit formaat 0.2. Concepten uit 0.1 krijgen bij migratie een identiteit. **Nieuw** start een afzonderlijk element.
+**Werkversies** bij **Element ontwerpen** geeft toegang tot eerdere lokale ontwerpen. Als je een andere plaat opent of met **Nieuw** begint, kun je hier terug naar de vorige tekening. Versie 0.5.1 neemt het bestaande lokale concept uit 0.4.1 of 0.5.0 over en bewaart de nieuwe werkversies apart. Ze zijn gekoppeld aan het lokale app- of browserprofiel.
+
+**Opslaan** bewaart het ontwerp als zelfstandig, bewerkbaar `.opc.json`-bestand in ontwerpformaat 0.4. Bestanden uit de Windows-app 0.4.1 (ontwerpformaat 0.3) behouden de bestaande doorsnede en IFC-identiteit. Dat geldt ook voor ontwerpen met constante dikte uit formaat 0.2. Concepten uit 0.1 krijgen bij migratie een identiteit.
 
 ## Feedback in de app
 

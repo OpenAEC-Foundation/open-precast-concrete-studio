@@ -3,7 +3,6 @@
   const get = id => document.getElementById(id);
   const fields = Object.keys(PrecastProject.defaults);
   const typeNames = {balcony:'Balkonplaat', gallery:'Galerijplaat'};
-  const draftKey = 'openaec.precast.design.v2';
   const drainageFields = ['channelProfile','channelWidth','channelDepth','channelInset','dripGroove','dripWidth','dripDepth','dripInset'];
   const profileFields = ['depth','slope','thickness','freeThickness','edgeProfile','edgeSide','edgeWidth','edgeDrop','upstand','upstandWidth','upstandHeight',...drainageFields];
   const referenceSettings = {depth:2210, slope:1, thickness:109.2, freeThickness:65, edgeProfile:'none', upstand:false, channelProfile:'none', dripGroove:false};
@@ -16,8 +15,12 @@
   let view = 'iso';
   let currentModel = null;
   let importNumber = 0;
+  let openRequest = 0;
   let locallySaved = true;
   let manualProfile = null;
+  let validProject = '';
+  let changed = false;
+  let downloadRevision = -1;
 
   function readControls() {
     return Object.fromEntries(fields.map(key => {
@@ -61,6 +64,7 @@
     currentModel = null;
     get('cutout-row').hidden = true;
     get('drain-coordinates').hidden = true;
+    get('drain-warning').textContent = '';
     for (const id of ['area-value','volume-value','mass-value','drop-value','drawing-size','end-values']) get(id).textContent = '—';
     for (const id of ['plan-view','section-view','iso-view','legend','profile-source']) get(id).setAttribute('hidden','');
     get('profile-checks').replaceChildren();
@@ -114,18 +118,47 @@
     return true;
   }
 
-  function remember() {
+  function draftContents() {
+    if (currentModel) validProject = PrecastProject.encode(currentModel.state, identity, projectName);
+    if (currentModel && !manualProfile) return validProject;
+    const record = JSON.parse(validProject);
+    if (manualProfile) record.manualProfile = manualProfile;
+    if (!currentModel) {
+      record.unfinished = Object.fromEntries(fields.map(key => {
+        const input = get(key);
+        return [key, input.type === 'checkbox' ? input.checked : input.value];
+      }));
+    }
+    return JSON.stringify(record);
+  }
+
+  function remember(opening = false) {
     try {
-      const project = PrecastProject.encode(currentModel.state, identity, projectName);
-      const draft = manualProfile ? JSON.stringify({...JSON.parse(project), manualProfile}) : project;
-      localStorage.setItem(draftKey, draft);
+      const content = draftContents();
+      if (opening) PrecastDrafts.open(content);
+      else PrecastDrafts.write(content);
       locallySaved = true;
     } catch { locallySaved = false; }
-    setStatus(locallySaved ? 'Werkversie lokaal bewaard' : 'Gebruik Opslaan om deze werkversie te bewaren.');
+    get('save-project').disabled = !currentModel && locallySaved;
+    if (!locallySaved) setStatus(currentModel ? 'Lokaal bewaren is mislukt. Gebruik Opslaan voor een eigen bestand.' :
+      'Lokaal bewaren is mislukt. Gebruik Opslaan voor een herstelkopie van je onvolledige invoer.');
+    else if (currentModel) setStatus('Werkversie lokaal bewaard');
+    if (get('drafts').open) listDrafts();
   }
+
+  function canSwitch() {
+    if (locallySaved || !changed) return true;
+    if (downloadRevision === importNumber && confirm('Heb je het gedownloade ontwerp als bestand bewaard en wil je doorgaan?')) return true;
+    setStatus('Bewaar je huidige ontwerp met Opslaan voordat je van werkversie wisselt.');
+    return false;
+  }
+  window.addEventListener('beforeunload', event => {
+    if (changed && !locallySaved) { event.preventDefault(); event.returnValue = true; }
+  });
 
   function updateField(event) {
     importNumber++;
+    changed = true;
     if (event.target.id === 'thicknessMode') {
       if (get('thicknessMode').value === 'reference') {
         // Keep raw inputs so an unfinished edit can also be resumed.
@@ -161,7 +194,8 @@
       const field = get(key);
       if (!Number.isFinite(field.valueAsNumber) || !field.checkValidity()) field.value = PrecastProject.defaults[key];
     }
-    if (refresh()) remember();
+    refresh();
+    remember();
   }
 
   function setView(next) {
@@ -185,19 +219,26 @@
   }
 
   async function saveDocument(kind) {
-    if (!currentModel) return;
     const isIfc = kind === 'ifc';
+    if (!currentModel && (isIfc || locallySaved)) return;
+    const revision = importNumber;
     try {
-      const state = currentModel.state;
-      const contents = isIfc ? PrecastIFC.export(state, currentModel, identity) : PrecastProject.encode(state, identity, projectName);
-      const mark = state.mark.replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
+      const state = currentModel?.state;
+      let contents;
+      if (isIfc) contents = PrecastIFC.export(state, currentModel, identity);
+      else if (locallySaved) contents = PrecastProject.encode(state, identity, projectName);
+      else contents = draftContents();
+      const mark = get('mark').value.trim().replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
       const suggestedName = mark + (isIfc ? '.ifc' : '.opc.json');
       const desktop = window.__TAURI__?.core;
       if (desktop) {
         const saved = await desktop.invoke('save_document', {kind, suggestedName, contents});
+        if (revision !== importNumber) return;
+        if (saved && !isIfc) changed = false;
         setStatus(saved ? (isIfc ? 'IFC-bestand opgeslagen' : 'Ontwerp opgeslagen') : 'Opslaan geannuleerd');
       } else {
         download(contents, suggestedName, isIfc ? 'application/x-step' : 'application/json');
+        if (!isIfc) downloadRevision = revision;
       }
     } catch (error) {
       setStatus((isIfc ? 'IFC-export mislukt. ' : 'Opslaan mislukt. ') + (error.message || error));
@@ -205,18 +246,20 @@
   }
 
   async function openFile(file) {
-    const number = ++importNumber;
+    const request = ++openRequest;
+    const number = importNumber;
     try {
       if (file.size > 1_000_000) throw new Error('Het ontwerpbestand is te groot.');
-      const loaded = PrecastProject.decode(await file.text(), PrecastIFC.newIdentity);
-      if (number !== importNumber) return;
-      manualProfile = null;
-      setControls(loaded.state);
-      identity = loaded.identity;
-      projectName = loaded.name;
-      if (refresh()) { remember(); setStatus('Geopend · ' + file.name); }
+      const content = await file.text();
+      const loaded = PrecastProject.decode(content, PrecastIFC.newIdentity);
+      if (number !== importNumber || request !== openRequest || !canSwitch()) return;
+      importNumber++;
+      restore(content, loaded);
+      changed = false;
+      remember(true);
+      if (locallySaved) setStatus('Geopend · ' + file.name);
     } catch (error) {
-      if (number === importNumber) setStatus('Openen mislukt. ' + error.message);
+      if (number === importNumber && request === openRequest) setStatus('Openen mislukt. ' + error.message);
     }
   }
 
@@ -234,40 +277,101 @@
   get('export-ifc').addEventListener('click', () => saveDocument('ifc'));
   get('print-drawing').addEventListener('click', () => { if (currentModel) window.print(); });
   get('new-project').addEventListener('click', () => {
-    if (!confirm('Een nieuw element starten? Bewaar het huidige ontwerp met Opslaan als je het later wilt openen.')) return;
+    if (!canSwitch() || !confirm('Een nieuw element starten?')) return;
     importNumber++;
     manualProfile = null;
     identity = PrecastIFC.newIdentity();
     projectName = '';
+    changed = false;
     setControls(PrecastProject.defaults);
-    refresh(); setView('iso'); remember();
-    setStatus('Nieuw element aangemaakt');
+    refresh(); setView('iso'); remember(true);
+    if (locallySaved) setStatus('Nieuw element aangemaakt');
   });
 
-  let initialState = PrecastProject.defaults;
-  let initialStatus = 'Nieuw element';
-  try {
-    const stored = localStorage.getItem(draftKey);
-    if (stored) {
-      const loaded = PrecastProject.decode(stored, PrecastIFC.newIdentity);
-      initialState = loaded.state;
-      projectName = loaded.name;
-      identity = loaded.identity;
-      const record = JSON.parse(stored);
-      const backup = record.manualProfile;
-      if (backup && record.schema === 'open-precast-concrete-studio/0.3') {
-        for (const key of drainageFields) {
-          const value = PrecastProject.defaults[key];
-          backup[key] = get(key).type === 'checkbox' ? value : String(value);
-        }
+  function hasInputs(values, keys) {
+    return values && keys.every(key => typeof values[key] === (get(key).type === 'checkbox' ? 'boolean' : 'string'));
+  }
+
+  function restore(content, loaded = PrecastProject.decode(content, PrecastIFC.newIdentity)) {
+    const record = JSON.parse(content);
+    const backup = record.manualProfile;
+    if (backup && record.schema === 'open-precast-concrete-studio/0.3') {
+      for (const key of drainageFields) {
+        const value = PrecastProject.defaults[key];
+        backup[key] = get(key).type === 'checkbox' ? value : String(value);
       }
-      if (initialState.thicknessMode === 'reference' && backup &&
-          profileFields.every(key => typeof backup[key] === (get(key).type === 'checkbox' ? 'boolean' : 'string'))) {
-        manualProfile = backup;
-      }
-      initialStatus = 'Lokale werkversie hersteld';
     }
-  } catch { initialStatus = 'Standaardontwerp geopend. Gebruik Opslaan voor een eigen bestand.'; }
-  setControls(initialState);
-  if (refresh()) { setView(view); remember(); if (locallySaved) setStatus(initialStatus); }
+    identity = loaded.identity;
+    projectName = loaded.name;
+    validProject = PrecastProject.encode(loaded.state, identity, projectName);
+    manualProfile = hasInputs(backup,profileFields) ? backup : null;
+    setControls(hasInputs(record.unfinished,fields) ? record.unfinished : loaded.state);
+    refresh();
+  }
+
+  let listed = [];
+  function listDrafts() {
+    const select = get('draft-list');
+    const previous = select.value;
+    try { listed = PrecastDrafts.entries(); } catch { listed = []; }
+    select.replaceChildren(...listed.map(entry => {
+      let label = 'Onleesbare werkversie';
+      try {
+        const record = JSON.parse(entry.content);
+        const state = record.unfinished || record.element;
+        if (state?.mark) label = state.mark + ' · ' + state.length + ' mm';
+      } catch { /* A raw copy can still be saved. */ }
+      const date = entry.savedAt ? new Date(entry.savedAt).toLocaleString('nl-NL') : 'eerdere versie';
+      return new Option(label + ' · ' + date, entry.key);
+    }));
+    if (listed.some(entry => entry.key === previous)) select.value = previous;
+    else if (PrecastDrafts.current()) select.value = PrecastDrafts.current();
+    for (const id of ['restore-draft','export-draft']) get(id).disabled = !select.value;
+  }
+  get('drafts').addEventListener('toggle', () => { if (get('drafts').open) listDrafts(); });
+  window.addEventListener('storage', () => { if (get('drafts').open) listDrafts(); });
+  get('restore-draft').addEventListener('click', () => {
+    listDrafts();
+    const entry = listed.find(item => item.key === get('draft-list').value);
+    if (!entry || !canSwitch()) return;
+    try {
+      restore(entry.content);
+      importNumber++;
+      locallySaved = true;
+      changed = true;
+      PrecastDrafts.select(entry.key);
+      setStatus('Lokale werkversie hersteld');
+    } catch { setStatus('Deze werkversie kan niet worden geopend. Met Kopie opslaan bewaar je het oorspronkelijke bestand.'); }
+  });
+  get('export-draft').addEventListener('click', async () => {
+    listDrafts();
+    const entry = listed.find(item => item.key === get('draft-list').value);
+    if (!entry) return;
+    const suggestedName = 'werkversie.opc.json';
+    try {
+      const desktop = window.__TAURI__?.core;
+      if (desktop) {
+        const saved = await desktop.invoke('save_document', {kind:'project',suggestedName,contents:entry.content});
+        setStatus(saved ? 'Kopie van werkversie opgeslagen' : 'Opslaan geannuleerd');
+      } else download(entry.content,suggestedName,'application/json');
+    } catch { setStatus('Kopie opslaan is mislukt.'); }
+  });
+
+  let initialStatus = 'Nieuw element';
+  setControls(PrecastProject.defaults);
+  refresh();
+  validProject = PrecastProject.encode(currentModel.state,identity,projectName);
+  try {
+    const record = PrecastDrafts.initial();
+    if (record) {
+      restore(record.content);
+      initialStatus = 'Lokale werkversie hersteld';
+      changed = true;
+      if (JSON.parse(record.content).schema === 'open-precast-concrete-studio/concept-0.1') remember(true);
+    } else remember(true);
+  } catch {
+    initialStatus = 'Lokale werkversie kon niet worden geopend. Kijk bij Werkversies om een kopie te bewaren.';
+  }
+  setView(view);
+  if (locallySaved) setStatus(initialStatus);
 })();

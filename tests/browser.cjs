@@ -224,6 +224,7 @@ async function main() {
     await page.reload();
     assert.equal(await control('drainPosition').inputValue(),'75');
     assert.deepEqual(errors,[]);
+    await require('./drafts-browser.cjs')(browser,url,dir);
     if (process.argv.includes('--examples')) {
       const target = path.resolve(__dirname,'../examples');
       await fs.mkdir(target,{recursive:true});
