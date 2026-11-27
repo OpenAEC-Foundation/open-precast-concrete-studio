@@ -1,0 +1,26 @@
+{
+  "schema": "open-precast-concrete-studio/0.2",
+  "unit": "mm",
+  "identity": "8320650a-c6bf-48d9-b797-2acd46e71a6a",
+  "name": "Galerij zuid",
+  "element": {
+    "density": 2450,
+    "upstandHeight": 140,
+    "upstandWidth": 80,
+    "element-type": "gallery",
+    "mark": "GP-Z01",
+    "storey": "02 Verdieping",
+    "supplier": "generic",
+    "length": 4600,
+    "depth": 1800,
+    "thickness": 200,
+    "shape": "chamfer",
+    "cut": 450,
+    "slope": 1.5,
+    "drain": true,
+    "railing": true,
+    "upstand": true,
+    "support": "console",
+    "finish": "waffle"
+  }
+}

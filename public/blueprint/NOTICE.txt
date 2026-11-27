@@ -1,0 +1,4 @@
+OpenAEC Foundation — OpenAEC Blueprint 2026.45.0 (ontwerp 0.4).
+openaec-tokens.css is ongewijzigd overgenomen uit de lokale Open Stair Studio-distributie.
+Bron: https://github.com/OpenAEC-Foundation/OpenAEC-Blueprint/tree/2eb8a958bbfe864dea81237e8890cf2405620b7d/web
+CC BY-SA 4.0. Zie BLUEPRINT-LICENSE.txt.

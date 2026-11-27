@@ -1,0 +1,114 @@
+/* Drawing primitives shared by the screen views and the element sheet. */
+.pc-drawing {
+  --pc-paper: var(--app);
+  --pc-top: color-mix(in srgb, var(--panel) 84%, var(--line-strong));
+  --pc-edge: color-mix(in srgb, var(--ink) 76%, var(--line-strong));
+}
+.pc-drawing text {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.pc-drawing .pc-concrete { fill: var(--pc-top); stroke: var(--pc-edge); stroke-width: 1.7; stroke-linejoin: round; }
+.pc-drawing .pc-surface { stroke: none; }
+.pc-drawing .pc-texture { color: var(--line-strong); fill: var(--line-strong); }
+.pc-drawing .pc-hatch { stroke: var(--line-strong); stroke-width: 1; fill: none; }
+.pc-drawing .pc-curb { fill: color-mix(in srgb, var(--line-strong) 42%, var(--pc-top)); stroke: var(--pc-edge); stroke-width: 1.2; }
+.pc-drawing .pc-facade { stroke: var(--blue); stroke-width: 3; fill: none; }
+.pc-drawing .pc-hidden-edge { stroke: var(--pc-edge); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; }
+.pc-drawing .pc-edge-detail { stroke: var(--pc-edge); stroke-width: 1.1; fill: none; }
+.pc-drawing .pc-detail-break { stroke: var(--pc-paper); stroke-width: 2.5; stroke-dasharray: 5 4; fill: none; }
+.pc-key.underside { height: 0; border-bottom: 1.5px dashed var(--ink); }
+.pc-drawing .pc-rail { stroke: var(--warning); stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+.pc-drawing .pc-socket { stroke: var(--warning); fill: var(--panel); stroke-width: 1.5; }
+.pc-drawing .pc-drain { stroke: var(--blue); fill: var(--panel); stroke-width: 2; }
+.pc-drawing .pc-cross { stroke: var(--blue); stroke-width: 1.3; fill: none; }
+.pc-drawing .pc-flow { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.pc-drawing .pc-cut { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 11 3 2 3; }
+.pc-drawing .pc-extension { stroke: var(--line-strong); stroke-width: 1; fill: none; }
+.pc-drawing .pc-dim { stroke: var(--pc-edge); stroke-width: 1.1; fill: none; }
+.pc-drawing text.pc-dim-label, .pc-drawing text.pc-tag {
+  font-size: 15px;
+  fill: var(--ink);
+  font-weight: 550;
+  paint-order: stroke fill;
+  stroke: var(--pc-paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.pc-drawing text.pc-tag { font-size: 14px; font-weight: 500; }
+.pc-drawing .pc-mesh-face {
+  --pc-solid-shade: color-mix(in srgb, var(--line-strong) var(--pc-shade), var(--panel));
+  fill: var(--pc-solid-shade);
+  stroke: var(--pc-solid-shade);
+  stroke-width: .7;
+}
+.pc-drawing .pc-mesh-edge {
+  fill: none;
+  stroke: var(--pc-edge);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+}
+#iso-view { cursor: grab; touch-action: none; user-select: none; }
+#iso-view:active { cursor: grabbing; }
+.pc-key { display: inline-block; width: 13px; height: 3px; }
+.pc-key.facade { background: var(--blue); }
+.pc-key.drain, .pc-key.railing { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--blue); }
+.pc-key.railing { border-color: var(--warning); }
+#legend { font-size: 11px; bottom: 26px; max-width: calc(100% - 36px); }
+.view-legend span { display: inline-flex; align-items: center; gap: 5px; }
+#print-sheet { display: none; }
+
+@media screen and (max-width: 620px) {
+  .canvas { grid-template: minmax(0,1fr) auto / minmax(0,1fr); align-content: stretch; }
+  .canvas .pc-drawing { grid-row: 1; height: 100%; max-height: 100%; }
+  .canvas #legend { grid-row: 2; position: static; max-width: 100%; justify-self: start; padding: 2px 10px 6px; gap: 2px 9px; }
+  .pc-drawing text.pc-tag, .pc-drawing text.pc-dim-label { font-size: 23px; }
+  #legend { bottom: 8px; }
+}
+
+@page { size: A4 landscape; margin: 10mm; }
+@media print {
+  html, body { min-height: auto; margin: 0; }
+  .app-shell { display: none !important; }
+  #print-sheet {
+    display: block;
+    --panel: white;
+    --app: white;
+    --ink: #202b28;
+    --muted: #54625c;
+    --line-strong: #a6b3ab;
+    --blue: #285686;
+    --accent: #3b6752;
+    --warning: #83591e;
+    color: #202b28;
+    font: 10pt/1.35 "Segoe UI", sans-serif;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    overflow-wrap: anywhere;
+  }
+  #print-sheet header {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 8mm;
+    align-items: end;
+    padding-bottom: 3mm;
+    border-bottom: 1pt solid #354c44;
+  }
+  #print-sheet header div:last-child { text-align: right; }
+  #print-sheet header p { font-size: 9pt; margin: 0; }
+  #print-sheet h1 { margin: 1mm 0 0; font-size: 16pt; font-weight: 650; }
+  #print-sheet .pc-sheet-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 5mm 0; }
+  #print-sheet figure { min-width: 0; margin: 0; border-bottom: .5pt solid #b9c5c0; padding-bottom: 3mm; }
+  #print-sheet figcaption { font-size: 10pt; font-weight: 650; }
+  #print-sheet svg { display: block; width: 100%; height: 72mm; --pc-paper: white; }
+  #print-sheet .pc-drawing text.pc-tag { font-size: 16px; }
+  #print-sheet .pc-drawing text.pc-dim-label { font-size: 17px; }
+  #print-sheet small { font-size: 8pt; }
+  #print-sheet dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm 6mm; }
+  #print-sheet dl div { margin: 0; }
+  #print-sheet dt { font-size: 8pt; color: #50615a; }
+  #print-sheet dd { margin: 0; font-size: 10pt; font-weight: 550; }
+  #print-sheet .pc-print-detail { margin: 2mm 0 0; font-size: 8pt; }
+  #print-sheet footer { margin-top: 5mm; padding-top: 2mm; border-top: .6pt solid #8b9e94; font-size: 8pt; }
+  #print-sheet:empty::before { content: "Vul de gemarkeerde elementgegevens aan om de tekening af te drukken."; }
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "open-precast-concrete-studio/0.3",
+  "unit": "mm",
+  "identity": "7af44382-395b-45d8-a72e-78c817abcbd0",
+  "name": "",
+  "element": {
+    "density": 2450,
+    "upstandHeight": 100,
+    "upstandWidth": 80,
+    "thicknessMode": "reference",
+    "freeThickness": 65,
+    "edgeProfile": "none",
+    "edgeSide": "facade",
+    "edgeWidth": 120,
+    "edgeDrop": 40,
+    "element-type": "balcony",
+    "mark": "BP-P01",
+    "storey": "01",
+    "supplier": "generic",
+    "length": 2200,
+    "depth": 2210,
+    "thickness": 109.2,
+    "shape": "rectangle",
+    "cut": 300,
+    "slope": 1,
+    "drain": false,
+    "railing": false,
+    "upstand": false,
+    "support": "isokorf",
+    "finish": "anti-slip"
+  }
+}

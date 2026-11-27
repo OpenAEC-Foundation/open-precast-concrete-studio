@@ -1,0 +1,19 @@
+{
+  "name": "open-precast-concrete-studio",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/model.test.cjs tests/project.test.cjs",
+    "test:browser": "node tests/browser.cjs && node tests/drawings.cjs",
+    "test:ifc": "uv run --no-project --python 3.12 --with ifcopenshell==0.9.0.post1 --with pytest tests/verify-ifc.py",
+    "verify": "npm test && npm run test:browser && npm run test:ifc"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenAEC-Foundation/open-precast-concrete-studio.git"
+  }
+}

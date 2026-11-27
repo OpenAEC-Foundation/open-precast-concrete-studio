@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="nl" data-oa-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open Precast Concrete Studio</title>
+  <link rel="stylesheet" href="public/blueprint/openaec-tokens.css">
+  <link rel="stylesheet" href="src/style.css">
+  <link rel="stylesheet" href="src/drawings.css">
+  <script src="src/model.js" defer></script>
+  <script src="src/project.js" defer></script>
+  <script src="src/profiles.js" defer></script>
+  <script src="src/ifc.js" defer></script>
+  <script src="src/drawings.js" defer></script>
+  <script src="src/app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <h1>Open Precast <span>Concrete Studio</span></h1>
+    <div class="actions">
+      <button type="button" id="new-project">Nieuw</button>
+      <button type="button" id="open-project">Open ontwerp</button><input id="file-input" type="file" accept=".json" hidden>
+      <button type="button" id="save-project">Opslaan</button>
+      <button type="button" id="print-drawing">Elementblad</button>
+      <button type="button" id="export-ifc" class="primary">Exporteer IFC4</button>
+    </div>
+  </header>
+  <main class="workspace">
+    <aside class="properties">
+      <h2>Element ontwerpen</h2>
+      <form id="parameters" novalidate>
+        <div class="field-pair"><label>Elementmerk<input id="mark" maxlength="80" required value="BP-01"></label><label>Bouwlaag<input id="storey" maxlength="80" required value="01"></label></div>
+        <label>Elementtype<select id="element-type"><option value="balcony">Balkonplaat</option><option value="gallery">Galerijplaat</option></select></label>
+        <fieldset><legend>Vorm en maatvoering</legend>
+          <label>Contour<select id="shape"><option value="rectangle">Rechthoek</option><option value="chamfer">Afgeschuinde vrije hoek</option><option value="trapezoid">Trapezium</option></select></label>
+          <div class="field-pair"><label>Lengte (mm)<input id="length" type="number" step="any" min="400" max="12000" required value="3200"></label><label>Diepte (mm)<input id="depth" type="number" step="any" min="400" max="4000" required value="1600"></label></div>
+          <label id="cut-row" hidden>Contourmaat (mm)<input id="cut" type="number" step="any" min="0" value="300"></label>
+          <label>Doorsnedeprofiel<select id="thicknessMode"><option value="constant">Constante dikte</option><option value="linear">Lineair dikteverloop</option><option value="reference">Hi-Con · gemeten doorsnede</option></select></label>
+          <p class="field-note" id="reference-note" hidden>Vaste diepte 2.210 mm met gevelneus en waterhol. Het betonprofiel volgt de gemeten snede door het Hi-Con Basic Line-balkon. De lengte langs de gevel blijft instelbaar.</p>
+          <div class="field-pair" id="thickness-fields"><label><span id="thickness-label">Plaatdikte (mm)</span><input id="thickness" type="number" step="any" min="40" max="500" required value="180"></label><label id="free-field" hidden>Bij vrije rand (mm)<input id="freeThickness" type="number" step="any" min="40" max="500" required value="180"></label></div>
+          <label>Afschot loopvlak (%)<input id="slope" type="number" step="any" min="0" max="5" required value="1.5"></label>
+        </fieldset>
+        <fieldset><legend>Randen en voorzieningen</legend>
+          <label>Rand onderzijde<select id="edgeProfile"><option value="none">Geen verdikking</option><option value="step">Rechthoekige verdikking</option><option value="bevel">Schuine verdikking</option></select></label>
+          <div id="edge-fields" hidden>
+            <label>Ligging<select id="edgeSide"><option value="free">Vrije rand</option><option value="facade">Gevelzijde</option></select></label>
+            <div class="field-pair"><label>Profielbreedte (mm)<input id="edgeWidth" type="number" min="10" max="1000" step="any" value="120"></label><label>Extra dikte (mm)<input id="edgeDrop" type="number" min="1" max="300" step="any" value="35"></label></div>
+          </div>
+          <label class="check"><input id="upstand" type="checkbox">Opstand aan de gevel</label>
+          <div class="field-pair" id="upstand-fields" hidden><label>Hoogte (mm)<input id="upstandHeight" type="number" min="20" max="500" step="any" value="100"></label><label>Breedte (mm)<input id="upstandWidth" type="number" min="20" max="300" step="any" value="80"></label></div>
+          <label class="check"><input id="drain" type="checkbox" checked>HWA-reservering</label>
+          <label class="check"><input id="railing" type="checkbox" checked>Hekwerkreserveringen</label>
+          <label>Loopvlak<select id="finish"><option value="anti-slip">Antislipstructuur</option><option value="smooth">Glad</option><option value="waffle">Wafelprofiel</option><option value="blasted">Gezandstraald</option></select></label>
+        </fieldset>
+        <fieldset><legend>Aansluiting en materiaal</legend>
+          <label>Aansluitprincipe<select id="support"><option value="isokorf">Koudebrugonderbreking</option><option value="console">Oplegging op consoles</option><option value="columns">Oplegging op kolommen</option><option value="steel">Oplegging op staal</option><option value="nokken">Nokken / stekken</option></select></label>
+          <label>Volumieke massa (kg/m³)<input id="density" type="number" min="1000" max="3500" step="any" required value="2450"></label>
+        </fieldset>
+      </form>
+    </aside>
+    <section class="drawing-area" aria-label="Elementtekening">
+      <div class="drawing-toolbar">
+        <div class="view-switch" aria-label="Weergave"><button type="button" data-view="iso" aria-pressed="true">3D</button><button type="button" data-view="plan" aria-pressed="false">Bovenaanzicht</button><button type="button" data-view="section" aria-pressed="false">Doorsnede</button></div>
+        <span id="view-caption"></span>
+      </div>
+      <div class="canvas" id="canvas">
+        <svg id="iso-view" class="drawing-svg" tabindex="0" role="img" aria-label="Draaibaar 3D-model"></svg>
+        <svg id="plan-view" class="drawing-svg" role="img" aria-label="Bovenaanzicht" hidden></svg>
+        <svg id="section-view" class="drawing-svg" role="img" aria-label="Doorsnede" hidden></svg>
+        <div id="legend" class="view-legend"></div>
+        <p id="invalid" role="alert" hidden></p>
+      </div>
+      <div class="drawing-footer"><strong id="element-code">BP-01</strong><span id="element-label"></span><span id="drawing-size"></span></div>
+    </section>
+    <aside class="inspector">
+      <h2>Elementgegevens</h2>
+      <dl class="quantities">
+        <div><dt>Oppervlak in plan</dt><dd id="area-value">—</dd></div>
+        <div><dt>Betonvolume</dt><dd id="volume-value">—</dd></div>
+        <div><dt>Indicatieve massa</dt><dd id="mass-value">—</dd></div>
+        <div><dt>Verval loopvlak</dt><dd id="drop-value">—</dd></div>
+        <div><dt>Dikte gevel / vrije rand</dt><dd id="end-values">—</dd></div>
+      </dl>
+      <section class="profile"><h3>Fabrikantprofiel</h3>
+        <label class="only-reader" for="supplier">Fabrikantprofiel</label><select id="supplier"><option value="generic">Generiek</option><option value="olbecon">Olbecon</option><option value="vebo">Vebo</option></select>
+        <p id="profile-caption"></p><ul id="profile-checks"></ul><a id="profile-source" target="_blank" rel="noreferrer" hidden>Productspecificatie ↗</a>
+      </section>
+      <section class="bim-info"><h3>BIM-overdracht</h3><dl><div><dt>IFC4</dt><dd>IfcSlab</dd></div><div><dt>Materiaal</dt><dd>Prefab beton</dd></div><div><dt>NL-SfB-hoofdgroep</dt><dd>23 · Vloeren</dd></div><div><dt>Uitwerking</dt><dd>Coördinatie</dd></div></dl></section>
+      <details class="notes"><summary>Open engineeringpunten</summary><p>De posities van HWA en hekwerk dienen voor afstemming. Voor productie vragen de afwatering, verankering, wapening en hijsvoorzieningen een uitgewerkt detail.</p></details>
+    </aside>
+  </main>
+  <footer id="status" role="status" aria-live="polite">Ontwerp geopend</footer>
+</div>
+<div id="print-sheet"></div>
+</body>
+</html>
