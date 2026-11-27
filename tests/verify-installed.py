@@ -101,7 +101,8 @@ def save_dialog(pid, target):
                 button = next((h for h in children if win32gui.GetClassName(h) == "Button"
                                and win32gui.GetDlgCtrlID(h) == win32con.IDOK), None)
                 if button and win32gui.IsWindowEnabled(button):
-                    win32gui.SendMessage(edit, win32con.WM_SETTEXT, 0, str(target))
+                    win32gui.SendMessage(edit, win32con.EM_SETSEL, 0, -1)
+                    win32gui.SendMessage(edit, win32con.EM_REPLACESEL, 1, str(target))
                     win32gui.PostMessage(button, win32con.BM_CLICK, 0, 0)
                     return
         time.sleep(.1)

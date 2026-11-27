@@ -8,6 +8,8 @@ Download het bestand met de uitgang `windows-x64-setup.exe` en voer het uit. De 
 
 **Opslaan** opent een Windows-dialoog voor het bewerkbare `.opc.json`-ontwerp. Met **Exporteer IFC4** kies je waar het `.ifc`-bestand komt. **Open ontwerp** opent een eerder opgeslagen plaat.
 
+De installer gebruikt Microsoft Edge WebView2. Als deze runtime op de computer ontbreekt, downloadt de installer deze bij de eerste installatie.
+
 De ZIP op dezelfde releasepagina bevat de webversie en voorbeelden. Pak de ZIP uit en open `index.html` in Edge of Chrome. In de map `examples` staan het [balkon met gemeten randprofiel](examples/BP-P01.opc.json) en de [galerijplaat met opstand](examples/GP-Z01.opc.json), elk met IFC4-bestand en elementblad.
 
 ## Een plaat tekenen
