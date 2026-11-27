@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Open Precast Concrete Studio",
+  "version": "0.4.0",
+  "identifier": "org.openaec.open-precast-concrete-studio",
+  "build": {
+    "frontendDist": "../target/desktop-ui",
+    "beforeBuildCommand": "node scripts/stage-desktop.mjs",
+    "beforeDevCommand": "node scripts/stage-desktop.mjs"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Open Precast Concrete Studio",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 640,
+        "minHeight": 480
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "OpenAEC Foundation",
+    "homepage": "https://github.com/OpenAEC-Foundation/open-precast-concrete-studio",
+    "license": "AGPL-3.0-only",
+    "resources": {
+      "../LICENSE": "LICENSE.txt",
+      "../public/blueprint/NOTICE.txt": "licenses/blueprint/NOTICE.txt",
+      "../public/blueprint/BLUEPRINT-LICENSE.txt": "licenses/blueprint/BLUEPRINT-LICENSE.txt"
+    },
+    "shortDescription": "Prefab balkon- en galerijplaten tekenen en exporteren naar IFC4",
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Dutch", "English"]
+      }
+    }
+  }
+}

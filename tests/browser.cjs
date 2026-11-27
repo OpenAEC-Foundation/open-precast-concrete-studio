@@ -189,6 +189,18 @@ async function main() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Horizontale overflow bij ' + width);
       assert.equal(await control('save-project').isVisible(),true);
     }
+    // The native dialog distinguishes a cancelled save from a failed write.
+    await page.evaluate(() => {
+      window.__TAURI__ = {core:{invoke:async () => false}};
+    });
+    await control('save-project').click();
+    assert.equal(await control('status').innerText(), 'Opslaan geannuleerd');
+    await page.evaluate(() => {
+      window.__TAURI__.core.invoke = async () => { throw 'Schijf vol'; };
+    });
+    await control('export-ifc').click();
+    assert.equal(await control('status').innerText(), 'IFC-export mislukt. Schijf vol');
+    assert.equal(await control('mark').inputValue(), 'BP-P01');
     assert.deepEqual(errors,[]);
     if (process.argv.includes('--examples')) {
       const target = path.resolve(__dirname,'../examples');

@@ -158,10 +158,9 @@
     if (currentModel) PrecastDrawings.render(currentModel.state, currentModel, next);
   }
 
-  function download(contents, extension, mime) {
-    const tag = currentModel.state.mark.replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
+  function download(contents, suggestedName, mime) {
     const link = document.createElement('a');
-    link.download = tag + extension;
+    link.download = suggestedName;
     const url = URL.createObjectURL(new Blob([contents], {type:mime}));
     link.href = url;
     document.body.append(link);
@@ -169,6 +168,26 @@
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus('Download aangeboden · ' + link.download);
+  }
+
+  async function saveDocument(kind) {
+    if (!currentModel) return;
+    const isIfc = kind === 'ifc';
+    try {
+      const state = currentModel.state;
+      const contents = isIfc ? PrecastIFC.export(state, currentModel, identity) : PrecastProject.encode(state, identity, projectName);
+      const mark = state.mark.replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
+      const suggestedName = mark + (isIfc ? '.ifc' : '.opc.json');
+      const desktop = window.__TAURI__?.core;
+      if (desktop) {
+        const saved = await desktop.invoke('save_document', {kind, suggestedName, contents});
+        setStatus(saved ? (isIfc ? 'IFC-bestand opgeslagen' : 'Ontwerp opgeslagen') : 'Opslaan geannuleerd');
+      } else {
+        download(contents, suggestedName, isIfc ? 'application/x-step' : 'application/json');
+      }
+    } catch (error) {
+      setStatus((isIfc ? 'IFC-export mislukt. ' : 'Opslaan mislukt. ') + (error.message || error));
+    }
   }
 
   async function openFile(file) {
@@ -197,14 +216,8 @@
     event.target.value = '';
     if (file) openFile(file);
   });
-  get('save-project').addEventListener('click', () => {
-    if (currentModel) download(PrecastProject.encode(currentModel.state, identity, projectName), '.opc.json','application/json');
-  });
-  get('export-ifc').addEventListener('click', () => {
-    if (!currentModel) return;
-    try { download(PrecastIFC.export(currentModel.state, currentModel, identity), '.ifc','application/x-step'); }
-    catch (error) { setStatus('IFC-export mislukt. ' + error.message); }
-  });
+  get('save-project').addEventListener('click', () => saveDocument('project'));
+  get('export-ifc').addEventListener('click', () => saveDocument('ifc'));
   get('print-drawing').addEventListener('click', () => { if (currentModel) window.print(); });
   get('new-project').addEventListener('click', () => {
     if (!confirm('Een nieuw element starten? Bewaar het huidige ontwerp met Opslaan als je het later wilt openen.')) return;

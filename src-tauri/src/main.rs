@@ -1,0 +1,49 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::io::Write;
+use std::path::Path;
+
+#[tauri::command]
+async fn save_document(
+    window: tauri::WebviewWindow,
+    kind: String,
+    suggested_name: String,
+    contents: String,
+) -> Result<bool, String> {
+    let (title, filter, extension) = match kind.as_str() {
+        "ifc" => ("IFC4 exporteren", "IFC-model", "ifc"),
+        "project" => ("Ontwerp opslaan", "Open Precast-ontwerp", "json"),
+        _ => return Err("Onbekend documenttype.".into()),
+    };
+    let name = Path::new(&suggested_name)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or("Ongeldige bestandsnaam.")?;
+    let selected = rfd::AsyncFileDialog::new()
+        .set_parent(&window)
+        .set_title(title)
+        .set_file_name(name)
+        .add_filter(filter, &[extension])
+        .save_file()
+        .await;
+    let Some(file) = selected else {
+        return Ok(false);
+    };
+    let path = file.path();
+    let parent = path.parent().ok_or("Ongeldige doelmap.")?;
+    // Replace the previous revision only after the complete new file is on disk.
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    temporary
+        .write_all(contents.as_bytes())
+        .and_then(|()| temporary.as_file().sync_all())
+        .map_err(|e| e.to_string())?;
+    temporary.persist(path).map_err(|e| e.error.to_string())?;
+    Ok(true)
+}
+
+fn main() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![save_document])
+        .run(tauri::generate_context!())
+        .expect("Open Precast Concrete Studio kon niet starten");
+}

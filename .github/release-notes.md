@@ -1,7 +1,9 @@
-# Open Precast Concrete Studio 0.3.0
+# Open Precast Concrete Studio 0.4.0 voor Windows
 
-Teken balkon- en galerijplaten met een constante of verlopende plaatdikte, een rechthoekige of schuine randverdikking en een optionele gevelopstand. Het gemeten Hi-Con-profiel bevat de gevelneus en het waterhol aan de vrije rand.
+Download **Open-Precast-Concrete-Studio-0.4.0-windows-x64-setup.exe**, voer de installer uit en open **Open Precast Concrete Studio** vanuit Start. De app installeert voor je eigen Windows-account.
 
-De doorsnede, het elementblad en het IFC4-bestand gebruiken hetzelfde betonlichaam. De voorbeelden bevatten bewerkbare ontwerpen, tekeningen en BIM-bestanden. Bestaande ontwerpen uit 0.1 en 0.2 kunnen worden geopend.
+Teken een balkon- of galerijplaat met een verlopende dikte, een randverdikking of het gemeten Hi-Con-profiel. Kies **Opslaan** voor het bewerkbare ontwerp en **Exporteer IFC4** voor het betonlichaam. In beide gevallen kies je de bestemming in de Windows-dialoog.
 
-Pak de ZIP volledig uit en open `index.html` in Edge of Chrome. Het bestand `SHA256SUMS.txt` bevat de controlesom van de download.
+De installatietest tekent een balkonplaat in de geïnstalleerde app en opent de export met IfcOpenShell om de maatvoering en het betonvolume te controleren.
+
+De afzonderlijke ZIP bevat de offline-webversie met voorbeeldontwerpen, elementbladen en IFC-bestanden. Pak deze volledig uit en open `index.html`. De SHA-256-controlesommen van de installer en de ZIP staan in `SHA256SUMS.txt`.

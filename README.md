@@ -1,6 +1,14 @@
 # Open Precast Concrete Studio
 
-Open `index.html` in Edge of Chrome. De editor werkt lokaal, ook als er geen internetverbinding is. Via **Open ontwerp** kun je de [galerijplaat met opstand](examples/GP-Z01.opc.json) of het [balkon met gemeten randprofiel](examples/BP-P01.opc.json) bewerken. De bijbehorende IFC4-bestanden en elementbladen staan in dezelfde map.
+Met Open Precast Concrete Studio teken je prefab balkon- en galerijplaten, maak je een elementblad en exporteer je het betonlichaam naar IFC4.
+
+## Installeren op Windows
+
+Download het bestand met de uitgang `windows-x64-setup.exe` en voer het uit. De installer installeert de app voor je eigen Windows-account. Open daarna **Open Precast Concrete Studio** vanuit Start. Tekenen en exporteren werken lokaal. [Download de nieuwste release](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/releases/latest)
+
+**Opslaan** opent een Windows-dialoog voor het bewerkbare `.opc.json`-ontwerp. Met **Exporteer IFC4** kies je waar het `.ifc`-bestand komt. **Open ontwerp** opent een eerder opgeslagen plaat.
+
+De ZIP op dezelfde releasepagina bevat de webversie en voorbeelden. Pak de ZIP uit en open `index.html` in Edge of Chrome. In de map `examples` staan het [balkon met gemeten randprofiel](examples/BP-P01.opc.json) en de [galerijplaat met opstand](examples/GP-Z01.opc.json), elk met IFC4-bestand en elementblad.
 
 ## Een plaat tekenen
 
@@ -49,4 +57,6 @@ Voor een onafhankelijke vergelijking met het oorspronkelijke fabrikantbestand, d
 
 De applicatie gebruikt de AGPL-3.0-licentie. De meegeleverde Blueprint-tokens hebben een eigen bronvermelding en licentie. [Applicatielicentie](LICENSE) · [Blueprint](public/blueprint/NOTICE.txt)
 
-GitHub Actions voert de model-, browser- en IFC-controles uit bij een push naar `main` en bij pull requests. Een geslaagde run levert een ZIP op met de offline-editor, voorbeelden en documentatie. De tagworkflow publiceert deze ZIP en een SHA-256-controlesom als GitHub Release zodra een versietag overeenkomt met `package.json`. De bijbehorende notities staan in [release-notes.md](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/blob/main/.github/release-notes.md). Een lokale distributie bouw je met `py scripts/package-release.py`.
+GitHub Actions voert de model-, browser- en IFC-controles uit bij een push naar `main` en bij pull requests. Voor een release bouwt GitHub de Windows x64-installer met Tauri en NSIS. De installatietest start het geïnstalleerde programma, tekent een balkonplaat en controleert het geëxporteerde bestand met IfcOpenShell. Na de geslaagde controles publiceert de releaseworkflow de installer, de webversie als ZIP en `SHA256SUMS.txt`. [Releasenotities](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/blob/main/.github/release-notes.md)
+
+Lokaal bouw je de installer op Windows met Node.js, Rust voor MSVC, de Visual Studio C++ Build Tools en WebView2. Voer `npm ci` en `npm run desktop:build` uit. De installer verschijnt in `target/release/bundle/nsis/`. De webversie verpak je met `py scripts/package-release.py`.
