@@ -30,11 +30,11 @@ async function main() {
     const set = (id, value) => page.locator('#'+id).fill(String(value));
     const select = (id, value) => page.locator('#'+id).selectOption(value);
     await page.locator('[data-view="section"]').click();
+    const points = loc => loc.evaluate(el => Array.from(el.points, p => [p.x,p.y]));
     async function verify(depth,near,far,area) {
       const whole = 'polygon[data-section="whole"]';
-      const read = loc => loc.evaluate(el => Array.from(el.points, p => [p.x,p.y]));
-      const screen = await read(page.locator('#section-view ' + whole));
-      const printed = await read(page.locator('#print-sheet ' + whole));
+      const screen = await points(page.locator('#section-view ' + whole));
+      const printed = await points(page.locator('#print-sheet ' + whole));
       assert.deepEqual(printed, screen);
       const measured = sectionReadback(screen, depth);
       for (const [field,expected] of Object.entries({near,far,area})) {
@@ -67,6 +67,72 @@ async function main() {
     }
     await page.check('#upstand');
     await verify(2200,210,115,205500); // 80 × 100 curb and 200 × 50 / 2 edge bevel.
+    await page.check('#dripGroove');
+    await set('drainPosition',25);
+    for (const shape of ['rectangle','chamfer','trapezoid']) {
+      await select('shape',shape);
+      for (const channel of ['rect','v']) {
+        await select('channelProfile',channel);
+        await verify(2200,210,115,205500 - (channel==='rect'?1500:750) - 60);
+        for (const prefix of ['#section-view','#print-sheet']) {
+          for (const role of ['channel','drip','edge']) {
+            const detail = await points(page.locator(prefix + ' polygon[data-section="'+role+'"]'));
+            assert.ok(detail.length >= 4 && detail.every(p => p.every(Number.isFinite)), role);
+          }
+          assert.match(await page.locator(prefix).textContent(),/B × D 100 × 15 mm/);
+          assert.match(await page.locator(prefix).textContent(),/B × D 15 × 8 mm/);
+        }
+        // Read the two plan strips and the HWA centre back in millimetres. The
+        // plan's concrete polygon supplies an independent origin and drawing scale.
+        const left = shape==='chamfer'?200:shape==='trapezoid'?300*(1-2100/2200):0;
+        const right = shape==='trapezoid'?3200-left:3200;
+        const expectedX = left+.25*(right-left);
+        for (const prefix of ['#plan-view','#print-sheet figure:first-child']) {
+          const contour = await points(page.locator(prefix+' polygon.pc-concrete').first());
+          const x0 = Math.min(...contour.map(p=>p[0])), y0 = Math.min(...contour.map(p=>p[1]));
+          const scale = (Math.max(...contour.map(p=>p[1]))-y0)/2200;
+          for (const [role,inner,outer] of [['channel',2050,2150],['drip',2160,2175]]) {
+            const coords = await points(page.locator(prefix+' [data-plan="'+role+'"]'));
+            const ys = coords.map(p=>(p[1]-y0)/scale);
+            assert.ok(Math.abs(Math.min(...ys)-inner)<.002 && Math.abs(Math.max(...ys)-outer)<.002, role);
+          }
+          const marker = await page.locator(prefix+' .pc-drain').evaluate(el=>[el.cx.baseVal.value,el.cy.baseVal.value]);
+          assert.ok(Math.abs((marker[0]-x0)/scale-expectedX)<.002 && Math.abs((marker[1]-y0)/scale-2100)<.002);
+        }
+        assert.match(await page.locator('#print-sheet').textContent(),/Y 2.100, Z -36 mm/);
+      }
+    }
+    await page.locator('[data-view="plan"]').click();
+    assert.match(await page.locator('#legend').textContent(),/Langsgoot bovenzijde/);
+    assert.match(await page.locator('#legend').textContent(),/Waterhol onderzijde/);
+    assert.match(await page.locator('#legend').textContent(),/HWA-reservering/);
+    await select('supplier','vebo');
+    const drainagePdf = await page.pdf({preferCSSPageSize:true, printBackground:true});
+    assert.equal(drainagePdf.toString('latin1').match(/\/Type\s*\/Page\b/g)?.length,1, 'Afwateringsblad past op één liggend A4');
+    await page.locator('[data-view="section"]').click();
+    // Both groove centres fall within 0.0001 mm of the chamfer's section at
+    // Y = 2000 mm. Read the cropped physical heights from the actual detail SVG.
+    await select('shape','chamfer');
+    await set('cut',200);
+    await select('edgeProfile','none');
+    await select('thicknessMode','constant');
+    await set('thickness',180);
+    await set('slope',0);
+    await set('channelInset',149.99995);
+    await set('dripWidth',16);
+    await set('dripInset',191.99994);
+    await verify(2200,280,180,2200*180+80*100-100*15/2-16*8/2);
+    for (const prefix of ['#section-view','#print-sheet']) {
+      for (const [role,span,expectedHeight] of [['channel',180,35],['drip',28.8,12.4]]) {
+        const detail = await points(page.locator(prefix+' polygon[data-section="'+role+'"]'));
+        const ranges = [0,1].map(axis=>{
+          const coords = detail.map(p=>p[axis]);
+          return Math.max(...coords)-Math.min(...coords);
+        });
+        const height = span*ranges[1]/ranges[0];
+        assert.ok(Math.abs(height-expectedHeight)<.002, role+' physical height '+height);
+      }
+    }
     await select('thicknessMode','reference');
     await verify(2210,130,65,193632.7098316);
     const actual = await page.locator('#section-view').textContent();
@@ -87,7 +153,7 @@ async function main() {
     const pages = pdf.toString('latin1').match(/\/Type\s*\/Page\b/g);
     assert.equal(pages?.length,1);
     assert.deepEqual(errors,[]);
-    console.log('Edge: SVG-vlak en einddikten nagemeten in scherm- en printdoorsneden voor constant, lineair en 12 combinaties van rand en contour; referentieneus, waterhol en één A4 gecontroleerd.');
+    console.log('Edge: doorsneden, planstroken en HWA-positie nagemeten op scherm en A4 voor drie plattegronden, rechte en V-goten, waterhol, randen en referentiebalkon.');
   } finally { await browser.close(); }
 }
 

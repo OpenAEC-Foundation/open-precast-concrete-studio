@@ -64,7 +64,15 @@ jobs:
             throw 'Unexpected gsudo package checksum.'
           }
           Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $env:RUNNER_TEMP 'gsudo')
-      - name: Install the release executable and verify a balcony IFC export
+      - name: Fetch the published installer for the upgrade test
+        shell: pwsh
+        run: |
+          $previous = Join-Path $env:RUNNER_TEMP 'open-precast-0.4.1-setup.exe'
+          Invoke-WebRequest 'https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/releases/download/v0.4.1/Open-Precast-Concrete-Studio-0.4.1-windows-x64-setup.exe' -OutFile $previous
+          if ((Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash -ne '30dbaf2449f9f0bb3e269df283dad090485448d8a27e0fc1c51ab781c0122695') {
+            throw 'Previous Windows installer checksum mismatch.'
+          }
+      - name: Upgrade a locally drawn balcony and verify its drainage and IFC export
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.number }}
@@ -81,7 +89,8 @@ jobs:
           icacls $output.FullName /grant:r "*${userSid}:(OI)(CI)M"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the test account access to its output directory.' }
           $gsudo = (Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'gsudo/x64/gsudo.exe')).FullName
-          & $gsudo --direct --wait --integrity Medium $python $test $installer --output $output.FullName
+          $previous = Join-Path $env:RUNNER_TEMP 'open-precast-0.4.1-setup.exe'
+          & $gsudo --direct --wait --integrity Medium $python $test $installer --upgrade-from $previous --output $output.FullName
           if ($LASTEXITCODE -ne 0) { throw "Installed-app test exited with code $LASTEXITCODE." }
       - name: Preserve the IFC and screenshot from the installed app
         uses: actions/upload-artifact@v7

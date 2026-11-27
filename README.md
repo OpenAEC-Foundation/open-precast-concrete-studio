@@ -10,7 +10,7 @@ Download het bestand met de uitgang `windows-x64-setup.exe` en voer het uit. De 
 
 De installer gebruikt Microsoft Edge WebView2. Als deze runtime op de computer ontbreekt, downloadt de installer deze bij de eerste installatie.
 
-De ZIP op dezelfde releasepagina bevat de webversie en voorbeelden. Pak de ZIP uit en open `index.html` in Edge of Chrome. In de map `examples` staan het [balkon met gemeten randprofiel](examples/BP-P01.opc.json) en de [galerijplaat met opstand](examples/GP-Z01.opc.json), elk met IFC4-bestand en elementblad.
+De ZIP op dezelfde releasepagina bevat de webversie en voorbeelden. Pak de ZIP uit en open `index.html` in Edge of Chrome. De voorbeelden kun je ook openen in de Windows-app. [Galerijplaat met afwatering](examples/GP-A01.opc.json) · [Balkon met gemeten randprofiel](examples/BP-P01.opc.json) · [Galerijplaat met opstand](examples/GP-Z01.opc.json)
 
 ## Een plaat tekenen
 
@@ -22,19 +22,30 @@ Bij **Hi-Con · gemeten doorsnede** volgt de editor een vaste snede van 2.210 mm
 
 De drie tekenweergaven gebruiken hetzelfde elementmodel. Sleep of gebruik de pijltjestoetsen om het model te draaien. **Elementblad** opent de afdrukweergave met bovenaanzicht, doorsnede, maatvoering, reserveringen en hoeveelheden. Kies in het afdrukvenster voor PDF om een bestand te bewaren. De maatlabels geven millimeters aan.
 
-Het HWA-punt en de hekwerkpunten liggen als reserveringen op de vrije rand. De export bevat hun lokale coördinaten. De keuze van de fysieke voorziening, de goot, de wapening, de aansluiting en het hijsplan hoort bij de verdere engineering.
+### Afwatering tekenen
+
+Kies bij **Afwatering** een rechthoekige langsgoot of een V-goot in het loopvlak. Vul de breedte, verticale diepte en afstand van de vrije rand tot de buitenste lip in. Met **V-waterhol onderzijde** teken je op dezelfde manier een afzonderlijke druipgroef. Beide details lopen evenwijdig aan de gevel en eindigen bij de werkelijke plaatcontour. De uitsparingen zijn zichtbaar op het elementblad en in de 3D-geometrie van de IFC. Het elementpaneel toont het uitgespaarde volume in liters en de resterende hoeveelheid beton in m³.
+
+Met **HWA-reservering** plaats je het hart van een toekomstige afvoer op de gootbodem. Zonder langsgoot ligt het punt op de vrije rand. De invoer loopt van 0% links tot 100% rechts op de plaatselijke plaatbreedte. Tekening en IFC geven de coördinaten door. Voor een fysieke doorvoer kies je bij de verdere engineering een afvoerpot en bijbehorende sparingsmaat. Het gemeten Hi-Con-profiel bevat zijn eigen waterhol.
+
+Voorbeeld GP-A01 is een galerijplaat van 3.600 × 1.800 mm met een langsgoot van 120 × 20 mm en een waterhol van 16 × 8 mm. De twee uitsparingen nemen samen 8,8704 liter beton weg. Het netto volume is 1,0765296 m³. [Elementblad](examples/GP-A01.pdf) · [IFC4](examples/GP-A01.ifc) · [Fabrikantdetails en metingen aan 3D-bestanden](docs/afwatering.md)
 
 ## Fabrikantprofielen en BIM
 
 - **Generiek** bewaart het element zonder leverancierselectie.
 - **Olbecon** vergelijkt balkonlengte, diepte en berekende massa met respectievelijk 10.000 mm, 3.000 mm en 17.000 kg. Een overschrijding blijft zichtbaar en het ontwerp blijft bewerkbaar. De bron noemt deze waarden specifiek voor balkons. [Olbecon](https://www.olbecon.nl/prefab/balkons-en-galerijplaten)
 - **Vebo** vergelijkt het afschot met het vlakke loopvlak van het standaardbalkon en benoemt de uit te werken ringgoot en randdetails. Het is een referentieprofiel. [Vebo standaardbalkon en Revit-tool](https://www.vebo.nl/balkonconcept)
+- **OMG Prefabbeton** vergelijkt zowel balkons als galerijen met de algemene productiematen van het atelier (10.000 × 4.500 mm en 16.000 kg). Voor de uitvoering met klokput laat de app zien of de goot en HWA-positie zijn ingetekend. [OMG, producten en productiemogelijkheden](https://www.omgprefabbeton.be/)
 - Een daadwerkelijk IFC2X3-fabrikantmodel van **Hi-Con Basic Line** is onderzocht op onder meer plaattype, randgeometrie en de betekenis van oppervlaktes. [Modelvergelijking met meetpunten en bronbestand](docs/bim-referentie.md)
 - De Nederlandse informatiekaart voor balkon- en galerijplaten onderbouwt de keuze voor `IfcSlab`, bouwlaag, elementmerk, maatvoering en voorzieningen. [Henselmans, informatiekaart p. 22](https://henselmans.nl/uploads/disk-162-cms/Downloads/BIM/HENSELMANS%20BIM%20Informatiekaarten%20V1.2-compressed.pdf)
 
 **Exporteer IFC4** schrijft één gesloten betonlichaam als `IfcSlab/FLOOR`, in een bouwlaag met de ingevoerde naam. Het bestand bevat materiaal, lokale plaatsing, projectieoppervlak, betonvolume en indicatieve massa. Het peil is lokaal. Na heropenen van het ontwerp of een maatrevisie houdt het element dezelfde IFC-identiteit.
 
-**Opslaan** bewaart alle instellingen als versie 0.3 in een bewerkbaar `.opc.json`-bestand. Een lokaal concept herstelt de laatste geldige invoer bij opnieuw openen in dezelfde browser. Een ontwerp uit versie 0.2 behoudt zijn constante plaatdikte en IFC-identiteit. Versie 0.1-bestanden krijgen bij migratie een identiteit. **Nieuw** start een afzonderlijk element.
+**Opslaan** bewaart de instellingen in ontwerpformaat 0.4 als bewerkbaar `.opc.json`-bestand. De app herstelt het laatste lokaal bewaarde concept bij opnieuw openen. Bestanden uit de Windows-app 0.4.1 (ontwerpformaat 0.3) behouden de bestaande doorsnede en IFC-identiteit. Dat geldt ook voor ontwerpen met constante dikte uit formaat 0.2. Concepten uit 0.1 krijgen bij migratie een identiteit. **Nieuw** start een afzonderlijk element.
+
+## Feedback in de app
+
+**Feedback** in de titelbalk opent een Nederlands formulier voor fouten, ideeën en vragen. Open Feedback Studio verzorgt de koppeling met de openbare GitHub-repository. Het formulier vermeldt vooraf welke velden meegaan en bewaart de invoer bij een fout. Verzending wordt alleen ingeschakeld met een bevestigd app-id in de centrale dienst. De Windows- en webversie staan voor feedback dezelfde HTTPS-bestemming toe. [Open Feedback Studio](https://open-feedback-studio.pages.dev)
 
 ## Basis uit Open Stair Studio
 

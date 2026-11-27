@@ -32,6 +32,15 @@ const cases = {
     edgeWidth:100, edgeDrop:40, upstand:true, upstandWidth:100, mark:'BP-C'},
   decimal:{...initial, depth:600.2, upstand:true, upstandWidth:82.4, edgeProfile:'step',
     edgeSide:'free', edgeWidth:517.8, edgeDrop:45, mark:'BP-F'},
+  gutter:{...initial, channelProfile:'rect', channelInset:50, channelWidth:100, channelDepth:15,
+    dripGroove:true, dripWidth:15, dripDepth:8, dripInset:25, drainPosition:30, mark:'BP-G'},
+  vchannel:{...initial, shape:'trapezoid', cut:240, thicknessMode:'linear', freeThickness:120,
+    channelProfile:'v', channelInset:62.5, channelWidth:125, channelDepth:30,
+    edgeProfile:'step', edgeSide:'free', edgeWidth:125, edgeDrop:15, dripGroove:true,
+    dripWidth:30, dripDepth:10, dripInset:110, drainPosition:0, mark:'BP-V'},
+  cornerChannel:{...initial, 'element-type':'gallery', supplier:'omg', shape:'chamfer', cut:320, upstand:true,
+    channelProfile:'rect', channelInset:0, channelWidth:320, channelDepth:23,
+    dripGroove:true, dripInset:50, dripWidth:20, dripDepth:8, drainPosition:100, mark:'GP-G'},
   reference:{...initial, thicknessMode:'reference', thickness:109.2, freeThickness:65,
     length:2200, depth:2210, slope:1, edgeProfile:'none', upstand:false, mark:'BP-R'}
 };

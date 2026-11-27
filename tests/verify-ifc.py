@@ -31,6 +31,17 @@ def interpolate(points, ordinate):
     raise ValueError(ordinate)
 
 
+def cut_depth(state, y, prefix, shape):
+    if shape == "none":
+        return 0
+    width = state[prefix+"Width"]
+    from_lip = state["depth"] - y - state[prefix+"Inset"]
+    if not 0 <= from_lip <= width:
+        return 0
+    factor = 1 if shape == "rect" else 1 - abs(2*from_lip/width - 1)
+    return factor * state[prefix+"Depth"]
+
+
 def section_dimensions(state, y):
     depth = state["depth"]
     if state.get("thicknessMode") == "reference":
@@ -48,7 +59,10 @@ def section_dimensions(state, y):
         if dist < state["edgeWidth"]:
             fraction = 1 if state["edgeProfile"] == "step" else (1-dist/state["edgeWidth"])
             thickness += state["edgeDrop"]*fraction
-    return walking_surface-thickness, top
+    bottom = walking_surface - thickness
+    if state.get("dripGroove"):
+        bottom += cut_depth(state, y, "drip", "v")
+    return bottom, top - cut_depth(state, y, "channel", state.get("channelProfile","none"))
 
 
 def plan_width(state, y):
@@ -73,6 +87,12 @@ def station_intervals(state):
         stations.add(w if state["edgeSide"] == "facade" else float(Decimal(str(depth))-Decimal(str(w))))
     if state.get("thicknessMode") == "reference":
         stations.update(2210-y for y, _ in REF_TOP + REF_BOTTOM)
+    for prefix, shape in [("channel",state.get("channelProfile","none")),("drip","v" if state.get("dripGroove") else "none")]:
+        if shape != "none":
+            lip = depth-state[prefix+"Inset"]
+            stations.update((lip, lip-state[prefix+"Width"]))
+            if shape == "v":
+                stations.add(lip-state[prefix+"Width"]/2)
     stations = sorted(stations)
     return list(zip(stations, stations[1:]))
 
@@ -210,7 +230,16 @@ def check_export(path):
     design = sets["OpenPrecast_Ontwerp"]
     mode = state.get("thicknessMode", "constant")
     assert design["Dikteverloop"] == {"constant":"Constant", "linear":"Lineair", "reference":"Hi-Con referentiedoorsnede"}[mode]
-    assert ("Verticale plaatdikte" in design) == (mode == "constant" and state.get("edgeProfile","none") == "none")
+    channel = state.get("channelProfile","none")
+    assert ("Verticale plaatdikte" in design) == (mode == "constant" and state.get("edgeProfile","none") == "none" and channel == "none" and not state.get("dripGroove"))
+    assert design["Langsgoot bovenzijde"] == {"none":"Geen","v":"V-goot","rect":"Rechthoekige langsgoot"}[channel]
+    if channel != "none" or state.get("dripGroove"):
+        for key, prefix, enabled in [("langsgoot","channel",channel != "none"),("waterhol","drip",state.get("dripGroove"))]:
+            if enabled:
+                assert math.isclose(design["Breedte "+key], state[prefix+"Width"]/1000)
+                assert math.isclose(design["Diepte "+key], state[prefix+"Depth"]/1000)
+                uncut = {**state, ("channelProfile" if prefix == "channel" else "dripGroove"):("none" if prefix == "channel" else False)}
+                assert math.isclose(design["Uitsparingsvolume "+key], expected_volume(uncut, intervals)-volume, abs_tol=1e-11)
     if mode == "reference":
         assert design["Bron referentiedoorsnede"].endswith("2000x2200x65-115-basis-isokorf.ifc")
     if mode == "linear":
@@ -223,24 +252,26 @@ def check_export(path):
     for y, name in [(0, "gevelzijde"), (depth, "vrije rand")]:
         bottom, top = section_dimensions(state,y)
         assert math.isclose(design["Totale eindhoogte " + name], (top-bottom)/1000)
-    assert design["Referentieprofiel fabrikant"] == {"generic":"Generiek", "vebo":"Vebo"}[state["supplier"]]
+    assert design["Referentieprofiel fabrikant"] == {"generic":"Generiek", "vebo":"Vebo", "omg":"OMG Prefabbeton"}[state["supplier"]]
     assert design["Constructieve uitwerking"] == "Open"
     assert design["HWA-reservering"] == state["drain"]
     assert design["Hekwerkreservering"] == state["railing"]
     assert design["Aantal HWA-reserveringen"] == int(state["drain"])
     assert design["Aantal hekwerkreserveringen"] == (3 if state["railing"] else 0)
     assert ("Status reserveringen" in design) == (state["drain"] or state["railing"])
-    left = cut if state["shape"] == "chamfer" else 0
-    def check_reservation(property_name, enabled, fraction):
+    def check_reservation(property_name, enabled, fraction, y):
         if not enabled:
             assert property_name not in design
             return
-        expected = ((left + fraction*(length-left))/1000, depth/1000, -depth*state["slope"]/100000)
+        width = plan_width(state,y)
+        left = (length-width)/2 if state["shape"] == "trapezoid" else length-width
+        expected = ((left + fraction*width)/1000, y/1000, section_dimensions(state,y)[1]/1000)
         for measured, coordinate in zip(design[property_name], expected, strict=True):
             assert math.isclose(measured, coordinate, abs_tol=1e-10)
-    check_reservation("Positie HWA-reservering", state["drain"], .66)
+    drain_y = depth if channel == "none" else depth-state["channelInset"]-state["channelWidth"]/2
+    check_reservation("Positie HWA-reservering", state["drain"], state.get("drainPosition",66)/100, drain_y)
     for i, fraction in enumerate([.1, .5, .9], start=1):
-        check_reservation(f"Positie hekwerkreservering {i}", state["railing"], fraction)
+        check_reservation(f"Positie hekwerkreservering {i}", state["railing"], fraction, depth)
     assert unit.get_project_unit(file, "MASSDENSITYUNIT").UnitType == "MASSDENSITYUNIT"
 
     geometry = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), slab)
@@ -270,7 +301,7 @@ if __name__ == "__main__":
         original = check_export(base / "base.ifc")
         revision = check_export(base / "revision.ifc")
         other = check_export(base / "gallery.ifc")
-        for name in ("wedge","step","diagonal","coincident","decimal","reference"):
+        for name in ("wedge","step","diagonal","coincident","decimal","reference","gutter","vchannel","cornerChannel"):
             check_export(base / (name + ".ifc"))
         if options.source_reference:
             compare_source(options.source_reference, base / "reference.ifc")

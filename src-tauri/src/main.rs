@@ -41,9 +41,18 @@ async fn save_document(
     Ok(true)
 }
 
+#[tauri::command]
+fn open_feedback_issue(url: String) -> Result<(), String> {
+    let parsed = tauri::Url::parse(&url).map_err(|_| "Ongeldige koppeling".to_string())?;
+    if !url.starts_with("https://github.com/") || parsed.host_str() != Some("github.com") {
+        return Err("Alleen GitHub-koppelingen kunnen worden geopend.".into());
+    }
+    open::that_detached(parsed.as_str()).map_err(|error| error.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![save_document])
+        .invoke_handler(tauri::generate_handler![save_document, open_feedback_issue])
         .run(tauri::generate_context!())
         .expect("Open Precast Concrete Studio kon niet starten");
 }

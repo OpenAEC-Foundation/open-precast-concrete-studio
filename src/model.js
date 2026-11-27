@@ -9,12 +9,14 @@
     finish: ['anti-slip', 'smooth', 'waffle', 'blasted'],
     thicknessMode: ['constant', 'linear', 'reference'],
     edgeProfile: ['none', 'step', 'bevel'],
-    edgeSide: ['free', 'facade']
+    edgeSide: ['free', 'facade'],
+    channelProfile: ['none', 'rect', 'v']
   };
   const names = {
     'element-type': 'elementtype', shape: 'plaatcontour', support: 'oplegging',
     finish: 'afwerking', drain: 'HWA', railing: 'hekwerk', upstand: 'opstand',
-    thicknessMode: 'dikteverloop', edgeProfile: 'randprofiel', edgeSide: 'profielzijde'
+    thicknessMode: 'dikteverloop', edgeProfile: 'randprofiel', edgeSide: 'profielzijde',
+    channelProfile: 'langsgoot', dripGroove: 'waterhol'
   };
 
   function checkRange(value, label, min, max) {
@@ -29,25 +31,35 @@
     }
     const state = {density: 2450, upstandHeight: 100, upstandWidth: 80,
       thicknessMode:'constant', freeThickness:180, edgeProfile:'none',
-      edgeSide:'free', edgeWidth:120, edgeDrop:35, ...input};
+      edgeSide:'free', edgeWidth:120, edgeDrop:35,
+      channelProfile:'none', channelWidth:100, channelDepth:15, channelInset:50,
+      dripGroove:false, dripWidth:15, dripDepth:8, dripInset:25, drainPosition:66, ...input};
     for (const [key, values] of Object.entries(choices)) {
       if (!values.includes(state[key])) throw new Error('Onbekende waarde voor ' + names[key] + '.');
     }
-    for (const key of ['drain', 'railing', 'upstand']) {
+    for (const key of ['drain', 'railing', 'upstand', 'dripGroove']) {
       if (typeof state[key] !== 'boolean') throw new Error('Ongeldige keuze voor ' + names[key] + '.');
     }
     checkRange(state.length, 'Lengte (mm)', 400, 12000);
-    checkRange(state.depth, 'Diepte (mm)', 400, 4000);
+    checkRange(state.depth, 'Diepte (mm)', 400, 5000);
     checkRange(state.thickness, 'Plaatdikte aan gevel (mm)', 40, 500);
     checkRange(state.freeThickness, 'Plaatdikte aan vrije rand (mm)', 40, 500);
     checkRange(state.edgeWidth, 'Profielbreedte (mm)', 10, 1000);
     checkRange(state.edgeDrop, 'Profielverdikking (mm)', 1, 300);
+    checkRange(state.drainPosition, 'HWA-positie (%)', 0, 100);
+    checkRange(state.channelWidth, 'Gootbreedte (mm)', 1, 4000);
+    checkRange(state.channelDepth, 'Gootdiepte (mm)', 1, 800);
+    checkRange(state.channelInset, 'Afstand goot tot vrije rand (mm)', 0, 4000);
+    checkRange(state.dripWidth, 'Waterholbreedte (mm)', 1, 4000);
+    checkRange(state.dripDepth, 'Waterholdiepte (mm)', 1, 800);
+    checkRange(state.dripInset, 'Afstand waterhol tot vrije rand (mm)', 0, 4000);
     if (state.edgeProfile !== 'none' && state.edgeWidth >= state.depth) {
       throw new Error('De profielbreedte moet kleiner zijn dan de plaatdiepte.');
     }
     if (state.thicknessMode === 'reference' &&
-        (state.depth !== 2210 || state.slope !== 1 || state.upstand || state.edgeProfile !== 'none')) {
-      throw new Error('Het referentieprofiel heeft 2210 mm diepte en 1% afschot. Kies geen aanvullende opstand of randverdikking.');
+        (state.depth !== 2210 || state.slope !== 1 || state.upstand || state.edgeProfile !== 'none' ||
+         state.channelProfile !== 'none' || state.dripGroove)) {
+      throw new Error('Het gemeten referentieprofiel heeft vaste randdetails, 2210 mm diepte en 1% afschot.');
     }
     checkRange(state.slope, 'Afschot (%)', 0, 5);
     const cutLimit = state.shape === 'rectangle' ? 1000 : Math.floor(Math.min(1000, state.depth * 0.45, state.length * 0.3));
@@ -101,6 +113,10 @@
     {id:'drip-groove', startY:2165.00025, endY:2174.99975}
   ];
 
+  // IFC model context is 1e-7 m. Allow one last written coordinate digit
+  // (1e-12 m) so rounding in the STEP file cannot collapse a retained interval.
+  const geometryTolerance = 0.0001 + 1e-9; // mm
+
   function interpolate(points, y) {
     const index = points.findIndex(p => p[0] >= y);
     const b = points[index];
@@ -112,12 +128,9 @@
   function sectionBands(state, outline) {
     const {depth, thickness, freeThickness, slope, thicknessMode, edgeProfile, edgeSide, edgeWidth} = state;
     const measured = thicknessMode === 'reference';
-    // The IFC point list writes 12 decimal places in metres. One station per
-    // representable interval prevents faces that collapse on serialization.
-    const stationTolerance = 1e-9; // mm
     const stations = [0,depth];
     function addStation(y) {
-      const existing = stations.find(other => Math.abs(other-y) <= stationTolerance);
+      const existing = stations.find(other => Math.abs(other-y) <= geometryTolerance);
       if (existing !== undefined) return existing;
       stations.push(y);
       return y;
@@ -128,19 +141,35 @@
     for (const [,y] of outline) addStation(y);
     const upstandEnd = state.upstand ? addStation(state.upstandWidth) : 0;
     const edgeEnd = edgeProfile === 'none' ? 0 : addStation(edgeSide === 'facade' ? edgeWidth : depth-edgeWidth);
+    function groove(width, inset, label) {
+      const outer = depth-inset, inner = outer-width;
+      if (inner < -geometryTolerance) throw new Error(label + ' valt buiten de plaatdiepte.');
+      return {inner:addStation(inner), centre:addStation(outer-width/2), outer:addStation(outer)};
+    }
+    const channel = state.channelProfile !== 'none' && groove(state.channelWidth,state.channelInset,'De langsgoot');
+    const drip = state.dripGroove && groove(state.dripWidth,state.dripInset,'Het waterhol');
+    if (channel && channel.inner < upstandEnd) throw new Error('De langsgoot overlapt de gevelopstand.');
+    function vFraction(feature, y) {
+      return y <= feature.centre ? (y-feature.inner)/(feature.centre-feature.inner) :
+        (feature.outer-y)/(feature.outer-feature.centre);
+    }
     stations.sort((a,b) => a-b);
     const bands = [];
+    let channelCentreRow;
     for (let i = 1; i < stations.length; i++) {
       const y0 = stations[i-1], y1 = stations[i];
       const midpoint = (y0+y1)/2;
       const raised = midpoint < upstandEnd;
       const edge = edgeProfile !== 'none' && (edgeSide === 'facade' ? midpoint < edgeEnd : midpoint > edgeEnd);
+      const inChannel = channel && midpoint > channel.inner && midpoint < channel.outer;
+      const inDrip = drip && midpoint > drip.inner && midpoint < drip.outer;
       // Profiles are evaluated separately on each side of a station. A step
       // has two genuine ordinates at its shoulder, which creates a vertical face.
       function sectionAt(y) {
         const [left,right] = limitsAt(state,y);
         if (measured) {
-          return {y, left, right, top:interpolate(referenceTop,y), bottom:interpolate(referenceBottom,y), edgeDrop:0, upstand:0};
+          return {y, left, right, top:interpolate(referenceTop,y), bottom:interpolate(referenceBottom,y),
+            edgeDrop:0, upstand:0, channelCut:0, dripCut:0};
         }
         const base = thicknessMode === 'linear' ? thickness+(freeThickness-thickness)*y/depth : thickness;
         const walk = -slope*y/100;
@@ -151,11 +180,22 @@
           if (edgeProfile === 'bevel' && y === edgeEnd) edgeDrop = 0;
         }
         const upstand = raised ? state.upstandHeight : 0;
-        return {y, left, right, top:walk+upstand, bottom:walk-base-edgeDrop, edgeDrop, upstand};
+        const channelCut = inChannel ? state.channelDepth*(state.channelProfile === 'rect' ? 1 : vFraction(channel,y)) : 0;
+        const dripCut = inDrip ? state.dripDepth*vFraction(drip,y) : 0;
+        return {y, left, right, top:walk+upstand-channelCut, bottom:walk-base-edgeDrop+dripCut,
+          edgeDrop, upstand, channelCut, dripCut};
       }
-      bands.push({a:sectionAt(y0), b:sectionAt(y1), edge, raised});
+      const a = sectionAt(y0), b = sectionAt(y1), previous = bands.at(-1)?.b ?? a;
+      // Both adjacent vertical intervals must overlap at a step. Positive
+      // thickness on each side alone can still give two disconnected solids.
+      if (Math.min(a.top,previous.top)-Math.max(a.bottom,previous.bottom) <= geometryTolerance ||
+          b.top-b.bottom <= geometryTolerance) {
+        throw new Error('Bij de goot of het waterhol blijft geen doorlopende betondoorsnede over.');
+      }
+      if (channel && y0 === channel.centre) channelCentreRow = a;
+      bands.push({a, b, edge, raised, inChannel, inDrip});
     }
-    return bands;
+    return {bands, channelCentreRow};
   }
 
   function footprint(bands) {
@@ -165,7 +205,7 @@
   }
 
   // Shared cuts on a longitudinal sidewall prevent T-junctions where a step
-  // starts on the top or the soffit. Each triangle lies in the same side plane.
+  // starts on the top or the soffit.
   function sideHeights(row, neighbour) {
     const levels = [row.bottom,row.top];
     if (neighbour) {
@@ -194,13 +234,10 @@
       for (const side of ['left','right']) {
         const near = sideHeights(a,previous).map(z => at(a,side,z));
         const far = sideHeights(b,next).map(z => at(b,side,z));
-        const add = face => faces.push(side === 'right' ? face : face.reverse());
-        if (near.length === 2 && far.length === 2) {
-          add([near[0],far[0],far[1],near[1]]);
-          continue;
-        }
-        for (let j=1; j<far.length; j++) add([near[0],far[j-1],far[j]]);
-        for (let j=1; j<near.length; j++) add([near[j-1],far.at(-1),near[j]]);
+        // Follow the first vertical edge down to the bottom, then go across.
+        // One planar face avoids sliver triangles between two nearby steps.
+        const [start,end] = side === 'right' ? [near,far] : [far,near];
+        faces.push([start[1],start[0],...end,...start.slice(2).reverse()]);
       }
       if (!previous) crossWall(a,a.bottom,a.top,true);
       else {
@@ -243,19 +280,22 @@
     const state = readState(input);
     const {depth,thickness,slope,thicknessMode} = state;
     const outline = outlineOf(state);
-    const bands = sectionBands(state,outline);
+    const {bands, channelCentreRow} = sectionBands(state,outline);
     const near = bands[0].a, far = bands.at(-1).b;
     const volumeM3 = integratedVolume(bands,r => r.top-r.bottom);
     // Symbols reserve locations. The illustrative layouts do not select products.
-    const reservation = fraction => [far.left+fraction*(far.right-far.left), depth, far.top];
+    const channelBands = bands.filter(b => b.inChannel);
+    const drainRow = channelCentreRow ?? far;
+    const reservation = (row,fraction) => [row.left+fraction*(row.right-row.left), row.y, row.top];
     const reservations = {
-      drain:state.drain ? reservation(0.66) : null,
-      railing:state.railing ? [0.1,0.5,0.9].map(reservation) : []
+      drain:state.drain ? reservation(drainRow,state.drainPosition/100) : null,
+      railing:state.railing ? [0.1,0.5,0.9].map(fraction => reservation(far,fraction)) : []
     };
     const measured = thicknessMode === 'reference';
     return {
       state, outline, upstandOutline:footprint(bands.filter(b => b.raised)),
       edgeOutline:footprint(bands.filter(b => b.edge)), edgeAtFacade:[near.left,near.right],
+      channelOutline:footprint(channelBands), dripOutline:footprint(bands.filter(b => b.inDrip)),
       sectionRing:sectionPolygon(bands),
       endThicknessMm:[near.top-near.bottom,far.top-far.bottom],
       baseThicknessMm:measured ? [109.2,65] : [thickness,thicknessMode === 'linear' ? state.freeThickness : thickness],
@@ -264,6 +304,7 @@
       areaM2:planArea(outline)/1e6,
       upstandVolumeM3:integratedVolume(bands,r => r.upstand),
       edgeVolumeM3:integratedVolume(bands,r => r.edgeDrop),
+      channelVolumeM3:integratedVolume(bands,r => r.channelCut), dripVolumeM3:integratedVolume(bands,r => r.dripCut),
       volumeM3, massKg:volumeM3*state.density, dropMm:slope*depth/100
     };
   }

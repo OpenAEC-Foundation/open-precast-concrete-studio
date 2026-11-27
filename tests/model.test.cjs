@@ -268,3 +268,142 @@ test('gemeten Hi-Con hoofdlichaam: broncoördinaten, doorsnede, gesloten mesh en
     assert.throws(() => build({...state,...change}),/referentieprofiel/);
   }
 });
+
+test('langsgoot en waterhol volgen de contour en minderen correct in snede, mesh en volume', () => {
+  // Both features cross a change in footprint or soffit. The reference
+  // volumes integrate the known footprint width against each cut separately.
+  for (const shape of ['rectangle','chamfer','trapezoid'])
+  for (const channelProfile of ['none','rect','v'])
+  for (const dripGroove of [false,true])
+  for (const edgeProfile of ['none','step','bevel']) {
+    const s = {...base, shape, thicknessMode:'linear', length:3000, depth:1500, thickness:180, freeThickness:100,
+      cut:150, upstand:true, edgeProfile, edgeWidth:120, edgeDrop:40, channelProfile, channelWidth:160,
+      channelInset:40, channelDepth:30, dripGroove, dripWidth:60, dripDepth:12, dripInset:90, drainPosition:28};
+    const plain = build({...s,channelProfile:'none',dripGroove:false});
+    const m = build(s);
+    function vVolume(inner, outer, depth) {
+      const centre = (inner+outer)/2;
+      const gradient = 2*depth/(outer-inner);
+      return integral(s,inner,centre,-inner*gradient,gradient) + integral(s,centre,outer,outer*gradient,-gradient);
+    }
+    const channel = channelProfile === 'none' ? 0 : channelProfile === 'rect' ?
+      integral(s,1300,1460,30,0) : vVolume(1300,1460,30);
+    const drip = dripGroove ? vVolume(1350,1410,12) : 0;
+    close(m.channelVolumeM3,channel,'Gootuitsparing');
+    close(m.dripVolumeM3,drip,'Waterholuitsparing');
+    close(m.areaM2,plain.areaM2,'Projectieoppervlak');
+    const net = plain.volumeM3-channel-drip;
+    close(m.volumeM3,net,'Netto betonvolume');
+    close(m.massKg,net*2450,'Massa');
+    close(auditMesh(m.parts[0].faces),net,'Gesloten mesh en gemeten inhoud');
+    for (const [polygon, exists, ymin, ymax] of [[m.channelOutline,!!channel,1300,1460],[m.dripOutline,dripGroove,1350,1410]]) {
+      if (!exists) { assert.deepEqual(polygon,[]); continue; }
+      assert.equal(Math.min(...polygon.map(p=>p[1])),ymin);
+      assert.equal(Math.max(...polygon.map(p=>p[1])),ymax);
+      for (const [x,y] of polygon) {
+        const inset = shape === 'trapezoid' ? (1-y/1500)*150 : 0;
+        const left = shape === 'chamfer' ? Math.max(0,y-1350) : inset;
+        assert.ok(Math.abs(left-x)<1e-9 || Math.abs(3000-inset-x)<1e-9);
+      }
+    }
+    for (const y of [1,300,1299.9,1300.1,1349.9,1350.1,1379.9,1380.1,1409.9,1410.1,1459.9,1460.1]) {
+      const ramp = (centre,half) => Math.max(0,1-Math.abs(y-centre)/half);
+      const drop = channelProfile === 'rect' ? (y>1300 && y<1460 ? 30 : 0) : channelProfile === 'v' ? 30*ramp(1380,80) : 0;
+      const lift = dripGroove ? 12*ramp(1380,30) : 0;
+      const [bottom,top] = sampleSection(plain.sectionRing,y).sort((a,b) => a-b);
+      const levels = [bottom+lift,top-drop];
+      closeHeights(sampleSection(m.sectionRing,y),levels,'Tekendoorsnede');
+      closeHeights(sampleMesh(m.parts[0].faces,1500,y),levels,'Werkelijke 3D-doorsnede');
+    }
+    const y = channelProfile === 'none' ? 1500 : 1380;
+    const inset = shape === 'trapezoid' ? (1-y/1500)*150 : 0;
+    const left = shape === 'chamfer' ? Math.max(0,y-1350) : inset;
+    const right = 3000-inset;
+    const hwa = m.reservations.drain;
+    close(hwa[0],left+.28*(right-left),'X vanaf plaatselijke linkerrand');
+    close(hwa[1],y,'Y');
+    close(hwa[2],-s.slope*y/100-(channelProfile === 'none' ? 0 : 30),'HWA op oppervlak');
+  }
+});
+
+test('waterdetails aan randen, decimale schouders en handmatige HWA-posities', () => {
+  const s = {...base, length:2400, depth:600.2, thickness:140, channelProfile:'rect', channelInset:0,
+    channelWidth:517.8, channelDepth:40, dripGroove:true, dripWidth:40, dripDepth:15, dripInset:0,
+    upstand:true, upstandWidth:82.4};
+  const m = build(s);
+  const expected = 2.4*(.6002*.140+.0824*.100-.5178*.040-.040*.015/2);
+  close(m.volumeM3,expected,'Volume bij aansluitende sprongen');
+  close(auditMesh(m.parts[0].faces),expected,'Mesh bij aansluitende sprongen');
+  close(m.endThicknessMm[1],100,'Open goot tot vrije rand');
+  for (const [position,x] of [[0,0],[100,2400]]) {
+    const result = build({...s,drainPosition:position});
+    close(result.reservations.drain[0],x,'HWA uiterste links/rechts');
+    assert.deepEqual(result.parts,m.parts);
+  }
+  const unmarked = build({...s,drain:false});
+  assert.equal(unmarked.reservations.drain,null);
+  assert.deepEqual(unmarked.parts,m.parts);
+});
+
+test('nabije gootlippen en HWA-stations respecteren de IFC-contextprecisie', () => {
+  require('../src/ifc.js');
+  const state = {...base, channelProfile:'rect',channelWidth:100,channelDepth:15,channelInset:50,
+    dripGroove:true,dripInset:50.00001,dripWidth:15,dripDepth:8,edgeProfile:'step',
+    edgeSide:'free',edgeWidth:100.00008,edgeDrop:35,drainPosition:25};
+  const model = build(state);
+  const stations = new Set(model.sectionRing.map(p => p[0]));
+  assert.ok(stations.has(1550) && !stations.has(state.depth-state.dripInset));
+  assert.ok(!stations.has(1500));
+  assert.equal(model.reservations.drain[1],state.depth-state.edgeWidth);
+  const [x,y,z] = model.reservations.drain;
+  assert.equal(x,800);
+  close(z,-state.slope*y/100-state.channelDepth,'HWA op werkelijke gootbodem');
+  close(auditMesh(model.parts[0].faces),model.volumeM3,'Netto-inhoud na samenvallende snijlijnen');
+
+  const ifc = PrecastIFC.export(state,model,'c27020f4-b0d2-4e7e-aa0d-01b790adc137');
+  const precision = Number(ifc.match(/'Model',3,([^,]+),#/)[1]);
+  const list = ifc.match(/IFCCARTESIANPOINTLIST3D\(\((.*?)\)\);/)[1];
+  const points = [...list.matchAll(/\(([^()]*)\)/g)].map(match => match[1].split(',').map(Number));
+  assert.ok(points.length > 8);
+  for (let i=0; i<points.length; i++) {
+    for (const q of points.slice(i+1)) {
+      assert.ok(Math.hypot(...q.map((v,k) => v-points[i][k])) > precision);
+    }
+  }
+  assert.throws(() => build({...base,channelProfile:'rect',channelDepth:179.99995}), /doorsnede/);
+  assert.throws(() => build({...base,dripGroove:true,dripDepth:179.99995}), /doorsnede/);
+});
+
+test('smalle strook tussen gootlip en randsprong behoudt meetbare IFC-zijvlakken', () => {
+  const model = build({...base, channelProfile:'rect',channelInset:50,channelWidth:100,channelDepth:1,
+    edgeSide:'free',edgeProfile:'step',edgeWidth:50.001,edgeDrop:1});
+  close(auditMesh(model.parts[0].faces),model.volumeM3,'Gesloten smalle strook');
+  for (const wall of model.parts[0].faces.filter(face => face.every(([x]) => x === 0))) {
+    const [,y0,z0] = wall[0];
+    let doubleArea = 0, longest = 0;
+    for (let i=0; i<wall.length; i++) {
+      const [,y,z] = wall[i], [,nextY,nextZ] = wall[(i+1)%wall.length];
+      doubleArea += (y-y0)*(nextZ-z0)-(nextY-y0)*(z-z0);
+      longest = Math.max(longest,Math.hypot(nextY-y,nextZ-z));
+    }
+    assert.ok(Math.abs(doubleArea) > longest*0.0001,'Zijvlak dient oplosbaar te zijn op de IFC-precisie');
+  }
+});
+
+test('ongeldige waterdetails en onderbroken doorsneden worden geweigerd', () => {
+  for (const patch of [
+    {channelProfile:'round'}, {dripGroove:'yes'}, {channelWidth:0},{channelDepth:-1},
+    {dripDepth:Infinity},{dripInset:-1},{drainPosition:NaN},{drainPosition:101},
+    {channelProfile:'v',channelWidth:1500,channelInset:101},
+    {dripGroove:true,dripWidth:200,dripInset:1401},
+    {channelProfile:'rect',upstand:true,channelWidth:1500,channelInset:30},
+    {channelProfile:'v',channelDepth:180},
+    {dripGroove:true,dripDepth:180},
+    {thickness:100,channelProfile:'rect',channelDepth:70,dripGroove:true,dripInset:62,dripDepth:31},
+    // Each side retains material but the two vertical intervals at the step are disjoint.
+    {thickness:60,edgeSide:'free',edgeProfile:'step',edgeWidth:120,edgeDrop:30,
+      channelProfile:'rect',channelInset:0,channelWidth:120,channelDepth:75},
+    {thicknessMode:'reference',slope:1,depth:2210,dripGroove:true},
+    {thicknessMode:'reference',slope:1,depth:2210,channelProfile:'rect'}
+  ]) assert.throws(() => build({...base,...patch}), Error);
+});

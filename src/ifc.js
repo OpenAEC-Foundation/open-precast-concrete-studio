@@ -127,7 +127,7 @@
     const bool = (name, value) => property(name, 'IFCBOOLEAN', value ? '.T.' : '.F.');
     const supports = { isokorf:'Koudebrugonderbreking', console:'Consoles', columns:'Kolommen', steel:'Staal', nokken:'Nokken / stekken' };
     const finishes = { 'anti-slip':'Antislipstructuur', smooth:'Glad', waffle:'Wafelprofiel', blasted:'Gezandstraald' };
-    const profiles = { generic:'Generiek', olbecon:'Olbecon', vebo:'Vebo' };
+    const profiles = { generic:'Generiek', olbecon:'Olbecon', vebo:'Vebo', omg:'OMG Prefabbeton' };
     const drainCount = model.reservations.drain ? 1 : 0;
     const railingCount = model.reservations.railing.length;
     const properties = [
@@ -150,11 +150,27 @@
     ];
     const mode = state.thicknessMode ?? 'constant';
     const profile = state.edgeProfile ?? 'none';
+    const channel = state.channelProfile ?? 'none';
+    const channelNames = {none:'Geen', rect:'Rechthoekige langsgoot', v:'V-goot'};
+    properties.push(label('Langsgoot bovenzijde', channelNames[channel]));
+    properties.push(label('Waterhol onderzijde', mode === 'reference' ? 'Volgens Hi-Con-referentiedoorsnede' : (state.dripGroove ? 'V-waterhol' : 'Geen')));
+    const cutVolume = (name, value) => property(name, 'IFCVOLUMEMEASURE', real(value));
+    if (channel !== 'none') {
+      properties.push(length('Breedte langsgoot', state.channelWidth), length('Diepte langsgoot', state.channelDepth),
+        length('Vrije rand tot buitenste gootlip', state.channelInset),
+        cutVolume('Uitsparingsvolume langsgoot', model.channelVolumeM3));
+    }
+    if (state.dripGroove) {
+      properties.push(length('Breedte waterhol', state.dripWidth), length('Diepte waterhol', state.dripDepth),
+        length('Vrije rand tot buitenste lip waterhol', state.dripInset),
+        cutVolume('Uitsparingsvolume waterhol', model.dripVolumeM3));
+    }
     const modeNames = {constant:'Constant', linear:'Lineair', reference:'Hi-Con referentiedoorsnede'};
     const edgeNames = {none:'Geen', step:'Rechthoekige verdikking', bevel:'Schuine verdikking'};
     properties.push(label('Dikteverloop', modeNames[mode]));
     if (mode === 'constant') {
-      properties.push(length(profile === 'none' ? 'Verticale plaatdikte' : 'Basisplaatdikte buiten randprofiel', state.thickness));
+      const baseName = profile === 'none' ? 'Verticale plaatdikte' : 'Basisplaatdikte buiten randprofiel';
+      properties.push(length(channel !== 'none' || state.dripGroove ? 'Basisplaatdikte buiten randdetails' : baseName, state.thickness));
     }
     if (mode === 'linear') {
       properties.push(length('Basisdikte gevelzijde', state.thickness), length('Basisdikte vrije rand', state.freeThickness));
@@ -194,6 +210,7 @@
       properties.push(label('Status reserveringen', 'Schematische posities voor coördinatie'));
     }
     if (model.reservations.drain) {
+      properties.push(property('HWA-positie vanaf links', 'IFCRATIOMEASURE', real((state.drainPosition ?? 66)/100)));
       properties.push(reservationLocation('Positie HWA-reservering', model.reservations.drain));
     }
     model.reservations.railing.forEach((point, index) => {

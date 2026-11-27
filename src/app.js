@@ -4,8 +4,9 @@
   const fields = Object.keys(PrecastProject.defaults);
   const typeNames = {balcony:'Balkonplaat', gallery:'Galerijplaat'};
   const draftKey = 'openaec.precast.design.v2';
-  const profileFields = ['depth','slope','thickness','freeThickness','edgeProfile','edgeSide','edgeWidth','edgeDrop','upstand','upstandWidth','upstandHeight'];
-  const referenceSettings = {depth:2210, slope:1, thickness:109.2, freeThickness:65, edgeProfile:'none', upstand:false};
+  const drainageFields = ['channelProfile','channelWidth','channelDepth','channelInset','dripGroove','dripWidth','dripDepth','dripInset'];
+  const profileFields = ['depth','slope','thickness','freeThickness','edgeProfile','edgeSide','edgeWidth','edgeDrop','upstand','upstandWidth','upstandHeight',...drainageFields];
+  const referenceSettings = {depth:2210, slope:1, thickness:109.2, freeThickness:65, edgeProfile:'none', upstand:false, channelProfile:'none', dripGroove:false};
   const media = matchMedia('(prefers-color-scheme: dark)');
   const useTheme = () => { document.documentElement.dataset.oaTheme = media.matches ? 'dark' : 'light'; };
   useTheme();
@@ -58,6 +59,8 @@
 
   function handleInvalid(message) {
     currentModel = null;
+    get('cutout-row').hidden = true;
+    get('drain-coordinates').hidden = true;
     for (const id of ['area-value','volume-value','mass-value','drop-value','drawing-size','end-values']) get(id).textContent = '—';
     for (const id of ['plan-view','section-view','iso-view','legend','profile-source']) get(id).setAttribute('hidden','');
     get('profile-checks').replaceChildren();
@@ -77,7 +80,11 @@
     get('thickness-label').textContent = state.thicknessMode === 'linear' ? 'Bij gevel (mm)' : 'Plaatdikte (mm)';
     get('reference-note').hidden = !reference;
     get('edge-fields').hidden = state.edgeProfile === 'none';
-    for (const id of ['depth','slope','edgeProfile','upstand']) get(id).disabled = reference;
+    for (const id of ['depth','slope','edgeProfile','upstand','channelProfile','dripGroove']) get(id).disabled = reference;
+    get('drainage-reference').hidden = !reference;
+    get('channel-fields').hidden = state.channelProfile === 'none';
+    get('drip-fields').hidden = !state.dripGroove;
+    get('drain-position-field').hidden = !state.drain;
     get('cut-row').hidden = state.shape === 'rectangle';
     get('upstand-fields').hidden = !state.upstand;
     get('element-code').textContent = state.mark;
@@ -90,6 +97,14 @@
     for (const id of ['print-drawing','save-project','export-ifc']) get(id).disabled = false;
     get('area-value').textContent = format(model.areaM2, 2) + ' m²';
     get('volume-value').textContent = format(model.volumeM3, 3) + ' m³';
+    get('cutout-row').hidden = state.channelProfile === 'none' && !state.dripGroove;
+    get('cutout-value').textContent = format((model.channelVolumeM3 + model.dripVolumeM3) * 1000, 3) + ' L';
+    const outlet = model.reservations.drain;
+    get('drain-coordinates').hidden = !outlet;
+    if (outlet) {
+      const axes = ['X','Y','Z'].map((axis,i) => axis + ' ' + format(outlet[i],1));
+      get('drain-coordinates').textContent = 'HWA-reservering · ' + axes.join(' / ') + ' mm';
+    }
     get('mass-value').textContent = format(model.massKg, 0) + ' kg';
     get('drop-value').textContent = format(model.dropMm, 1) + ' mm';
     get('end-values').textContent = model.endThicknessMm.map(n => format(n,1)).join(' / ') + ' mm';
@@ -127,12 +142,6 @@
         get('freeThickness').value = PrecastProject.defaults.freeThickness;
       }
     }
-    if (get('edgeProfile').value === 'none') {
-      for (const key of ['edgeWidth','edgeDrop']) {
-        const field = get(key);
-        if (!Number.isFinite(field.valueAsNumber) || !field.checkValidity()) field.value = PrecastProject.defaults[key];
-      }
-    }
     if (event.target.id === 'element-type' && ['GP-01','BP-01'].includes(get('mark').value)) {
       get('mark').value = get('element-type').value === 'gallery' ? 'GP-01' : 'BP-01';
     }
@@ -141,11 +150,16 @@
       const cut = get('cut').valueAsNumber;
       if (!Number.isFinite(cut) || cut < 0 || cut > 1000) get('cut').value = PrecastProject.defaults.cut;
     }
-    if (!get('upstand').checked) {
-      for (const key of ['upstandWidth','upstandHeight']) {
-        const control = get(key);
-        if (!Number.isFinite(control.valueAsNumber) || !control.checkValidity()) control.value = PrecastProject.defaults[key];
-      }
+    const inactiveFields = [
+      ...(get('edgeProfile').value === 'none' ? ['edgeWidth','edgeDrop'] : []),
+      ...(!get('upstand').checked ? ['upstandWidth','upstandHeight'] : []),
+      ...(get('channelProfile').value === 'none' ? ['channelWidth','channelDepth','channelInset'] : []),
+      ...(!get('dripGroove').checked ? ['dripWidth','dripDepth','dripInset'] : []),
+      ...(!get('drain').checked ? ['drainPosition'] : [])
+    ];
+    for (const key of inactiveFields) {
+      const field = get(key);
+      if (!Number.isFinite(field.valueAsNumber) || !field.checkValidity()) field.value = PrecastProject.defaults[key];
     }
     if (refresh()) remember();
   }
@@ -239,9 +253,16 @@
       initialState = loaded.state;
       projectName = loaded.name;
       identity = loaded.identity;
-      const backup = JSON.parse(stored).manualProfile;
+      const record = JSON.parse(stored);
+      const backup = record.manualProfile;
+      if (backup && record.schema === 'open-precast-concrete-studio/0.3') {
+        for (const key of drainageFields) {
+          const value = PrecastProject.defaults[key];
+          backup[key] = get(key).type === 'checkbox' ? value : String(value);
+        }
+      }
       if (initialState.thicknessMode === 'reference' && backup &&
-          profileFields.every(key => typeof backup[key] === (key === 'upstand' ? 'boolean' : 'string'))) {
+          profileFields.every(key => typeof backup[key] === (get(key).type === 'checkbox' ? 'boolean' : 'string'))) {
         manualProfile = backup;
       }
       initialStatus = 'Lokale werkversie hersteld';

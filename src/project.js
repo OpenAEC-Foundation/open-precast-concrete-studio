@@ -1,16 +1,19 @@
 (function (root) {
   'use strict';
   const modelApi = typeof module === 'undefined' ? root.PrecastModel : require('./model.js');
-  const schema = 'open-precast-concrete-studio/0.3';
+  const schema = 'open-precast-concrete-studio/0.4';
+  const profileSchema = 'open-precast-concrete-studio/0.3';
   const uniformSchema = 'open-precast-concrete-studio/0.2';
   const oldSchema = 'open-precast-concrete-studio/concept-0.1';
+  const drainageDefaults = {channelProfile:'none', channelWidth:100, channelDepth:15, channelInset:50,
+    dripGroove:false, dripWidth:15, dripDepth:8, dripInset:25, drainPosition:66};
   const defaults = Object.freeze({
     'element-type':'balcony', mark:'BP-01', storey:'01', supplier:'generic',
     length:3200, depth:1600, thickness:180, shape:'rectangle', cut:300, slope:1.5,
     drain:true, railing:true, upstand:false, support:'isokorf', finish:'anti-slip',
     density:2450, upstandWidth:80, upstandHeight:100,
     thicknessMode:'constant', freeThickness:180,
-    edgeProfile:'none', edgeSide:'free', edgeWidth:120, edgeDrop:35
+    edgeProfile:'none', edgeSide:'free', edgeWidth:120, edgeDrop:35, ...drainageDefaults
   });
   const geometryFields = Object.keys(defaults);
   function validText(value, label) {
@@ -30,7 +33,7 @@
     const state = Object.fromEntries(geometryFields.map(key => [key, input[key]]));
     state.mark = validText(state.mark,'elementmerk');
     state.storey = validText(state.storey,'bouwlaagnummer of naam');
-    if (!['generic','olbecon','vebo'].includes(state.supplier)) throw new Error('Onbekend fabrikantprofiel.');
+    if (!['generic','olbecon','vebo','omg'].includes(state.supplier)) throw new Error('Onbekend fabrikantprofiel.');
     return modelApi.build(state);
   }
   function encode(input, identity, name) {
@@ -52,7 +55,10 @@
     } else if (data.schema === uniformSchema) {
       identity = checkIdentity(data.identity);
       state = {...data.element, thicknessMode:'constant', freeThickness:data.element.thickness,
-        edgeProfile:'none', edgeSide:'free', edgeWidth:120, edgeDrop:35};
+        edgeProfile:'none', edgeSide:'free', edgeWidth:120, edgeDrop:35, ...drainageDefaults};
+    } else if (data.schema === profileSchema) {
+      identity = checkIdentity(data.identity);
+      state = {...data.element, ...drainageDefaults};
     } else if (data.schema === schema) {
       identity = checkIdentity(data.identity);
     } else {

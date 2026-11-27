@@ -11,6 +11,7 @@
   const contourNames = { rectangle: 'Rechthoek', chamfer: 'Afgeschuinde hoek', trapezoid: 'Trapezium' };
   const point = ([x, y]) => x.toFixed(6) + ',' + y.toFixed(6);
   const referenceDisplay = state => state.thicknessMode === 'reference';
+  const hasChannel = state => state.channelProfile === 'rect' || state.channelProfile === 'v';
   const polygon = (vertices, css, extra = '') =>
     '<polygon points="' + vertices.map(point).join(' ') + '" class="' + css + '" ' + extra + '/>';
   const line = (a, b, css) => '<path d="M' + point(a) + 'L' + point(b) + '" class="' + css + '"/>';
@@ -60,6 +61,21 @@
     return tile ? '<defs><pattern class="pc-texture" id="' + id + '" width="9" height="9" patternUnits="userSpaceOnUse">' + tile + '</pattern></defs>' : '';
   }
 
+  function transverseLine(outline, y, map, css) {
+    const xs = [];
+    outline.forEach(([x0,y0], i) => {
+      const [x1,y1] = outline[(i+1) % outline.length];
+      if (y0 !== y1 && y >= Math.min(y0,y1) && y <= Math.max(y0,y1)) {
+        xs.push(x0 + (x1-x0) * (y-y0)/(y1-y0));
+      }
+    });
+    return xs.length >= 2 ? line(map([Math.min(...xs),y]),map([Math.max(...xs),y]),css) : '';
+  }
+
+  function nearestStation(stations, requested) {
+    return stations.reduce((nearest,y) => Math.abs(y-requested) < Math.abs(nearest-requested) ? y : nearest);
+  }
+
   function plan(state, model, prefix) {
     const map = fit(model.outline, { x: 117, y: 90, w: 555, h: 265 });
     const { length, depth } = state;
@@ -76,18 +92,18 @@
     if (def) drawing += polygon(contour, 'pc-surface', 'fill="url(#' + prefix + '-finish)"');
     if (model.upstandOutline?.length) drawing += polygon(model.upstandOutline.map(map), 'pc-curb');
     if (model.edgeOutline?.length) drawing += polygon(model.edgeOutline.map(map), 'pc-hidden-edge');
+    if (model.channelOutline?.length) {
+      drawing += polygon(model.channelOutline.map(map), 'pc-channel', 'data-plan="channel"');
+      if (state.channelProfile === 'v') {
+        const center = nearestStation(model.channelOutline.map(([,y])=>y), depth-state.channelInset-state.channelWidth/2);
+        drawing += transverseLine(model.channelOutline,center,map,'pc-channel-fold');
+      }
+    }
+    if (model.dripOutline?.length) drawing += polygon(model.dripOutline.map(map), 'pc-drip-edge', 'data-plan="drip"');
     if (referenceDisplay(state)) {
       for (const feature of model.referenceFeatures) {
         const y = feature.id === 'facade-lip' ? feature.endY : (feature.startY + feature.endY)/2;
-        const crossings = [];
-        model.outline.forEach((p,i) => {
-          const q = model.outline[(i+1) % model.outline.length];
-          if (y > Math.min(p[1], q[1]) && y < Math.max(p[1], q[1])) {
-            const t = (y-p[1])/(q[1]-p[1]);
-            crossings.push(p[0]+t*(q[0]-p[0]));
-          }
-        });
-        if (crossings.length === 2) drawing += line(map([crossings[0],y]),map([crossings[1],y]),
+        drawing += transverseLine(model.outline,y,map,
           feature.id === 'facade-lip' ? 'pc-edge-detail' : 'pc-hidden-edge');
       }
     }
@@ -150,8 +166,9 @@
   }
 
   function sectionEnd(loop, station) {
-    const values = loop.filter(p => Math.abs(p[0] - station) < 1e-7).map(p => p[1]);
-    return {top:[station, Math.min(...values)], bottom:[station, Math.max(...values)]};
+    const y = nearestStation(loop.map(p=>p[0]), station);
+    const values = loop.filter(p => p[0] === y).map(p => p[1]);
+    return {top:[y, Math.min(...values)], bottom:[y, Math.max(...values)]};
   }
 
   // Section-space Y points down on the sheet. Both axes use one scale per view.
@@ -159,7 +176,8 @@
     const loop = model.sectionRing.map(([y,z]) => [y,-z]);
     const reference = state.thicknessMode === 'reference';
     const profiled = state.edgeProfile !== 'none' && Boolean(state.edgeProfile);
-    const detailed = reference || profiled;
+    const drainage = hasChannel(state) || state.dripGroove;
+    const detailed = reference || profiled || drainage;
     const map = fit(loop, detailed ? {x:110,y:59,w:540,h:118} : {x:110,y:120,w:540,h:170});
     const near = sectionEnd(loop,0), far = sectionEnd(loop,state.depth);
     const deepest = Math.max(...loop.map(p => p[1]));
@@ -176,7 +194,48 @@
     drawing += label(380, detailed ? 23 : 56, fall);
 
     if (reference) drawing += referenceDetails(state, model, loop, hatch);
+    else if (drainage) drawing += drainageDetails(state, model, loop, hatch, profiled);
     else if (profiled) drawing += edgeDetail(state, model, loop, hatch);
+    return drawing;
+  }
+
+  function drainageDetails(state, model, loop, hatch, profiled) {
+    const panels = [];
+    // Each enlargement is a clipping of the drawn concrete contour. This keeps
+    // the local slopes and intersecting soffit profiles at their real angles.
+    function addCut(id, title, outline, depth, top) {
+      const stations = [...new Set(outline.map(([,y])=>y))];
+      const start = Math.min(...stations), end = Math.max(...stations);
+      const width = end-start;
+      const margin = width * .4;
+      const crop = clipAt(clipAt(loop, 0, start - margin, false), 0, end + margin, true);
+      const levels = stations.map(y => sectionEnd(loop,y)[top ? 'top' : 'bottom'][1]);
+      const backing = Math.max(depth * .55, width * .2);
+      const cut = top ? Math.max(...levels) + backing : Math.min(...levels) - backing;
+      panels.push({id,title,contour:clipAt(crop,1,cut,top),
+        size:'B × D ' + number(width) + ' × ' + number(depth) + ' mm',
+        position:number(state.depth-end) + ' mm uit vrije rand'});
+    }
+    if (hasChannel(state)) addCut('channel', state.channelProfile === 'rect' ? 'Rechthoekige langsgoot' : 'V-langsgoot',
+      model.channelOutline, state.channelDepth, true);
+    if (state.dripGroove) addCut('drip','V-waterhol onderzijde',model.dripOutline,state.dripDepth,false);
+    if (profiled) {
+      const facade = state.edgeSide === 'facade';
+      const margin = state.edgeWidth * 1.3;
+      panels.push({id:'edge', title:edgeNames[state.edgeProfile],
+        contour:clipAt(loop,0,facade ? margin : state.depth-margin,facade),
+        size:'B × H ' + number(state.edgeWidth) + ' × ' + number(state.edgeDrop) + ' mm',
+        position:facade ? 'Gevelzijde' : 'Vrije rand'});
+    }
+    const slot = 704/panels.length;
+    let drawing = line([44,236],[716,236],'pc-extension');
+    panels.forEach(({id,title,contour,size,position},i) => {
+      const center = 28 + slot*(i+.5);
+      const width = Math.min(slot-30,280);
+      const map = fit(contour,{x:center-width/2,y:280,w:width,h:78});
+      drawing += '<g class="pc-profile-panel">' + label(center,260,title) +
+        concreteSection(contour,map,hatch,id) + label(center,388,size) + label(center,411,position) + '</g>';
+    });
     return drawing;
   }
 
@@ -351,9 +410,11 @@
   function legend(state, view) {
     if (view === 'iso') return '<span>Slepen of pijltjestoetsen om te draaien · Home voor beginstand</span>';
     if (view === 'section') return '<span>A–A · X = ' + number(state.length / 2, 1) + ' mm</span><span>Y = 0 aan gevel · Z = 0 op doorgetrokken loopvlak aan gevel</span>' +
-      (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none' ? '<span>Randdetails afzonderlijk vergroot</span>' : '');
+      (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none' || hasChannel(state) || state.dripGroove ? '<span>Details afzonderlijk vergroot</span>' : '');
     let items = '<span><i class="pc-key facade"></i>Gevelrand</span>';
     if (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none') items += '<span><i class="pc-key underside"></i>Profiel onderzijde</span>';
+    if (hasChannel(state)) items += '<span><i class="pc-key channel"></i>Langsgoot bovenzijde</span>';
+    if (state.dripGroove) items += '<span><i class="pc-key drip-groove"></i>Waterhol onderzijde</span>';
     if (state.drain) items += '<span><i class="pc-key drain"></i>HWA-reservering</span>';
     if (state.railing) items += '<span><i class="pc-key railing"></i>Hekwerkreservering</span>';
     return items;
@@ -366,7 +427,7 @@
       escape(title) + '">' + content + '</svg><small>' + escape(notes) + '</small></figure>';
     const name = typeName(state);
     const defaultMark = state['element-type'] === 'gallery' ? 'GP-01' : 'BP-01';
-    const supplier = { generic: 'Generiek', olbecon: 'Olbecon', vebo: 'Vebo' }[state.supplier] ?? state.supplier ?? 'Generiek';
+    const supplier = { generic: 'Generiek', olbecon: 'Olbecon', vebo: 'Vebo', omg:'OMG Prefabbeton' }[state.supplier] ?? state.supplier ?? 'Generiek';
     const contour = contourNames[state.shape] + (state.shape === 'chamfer' ? ' · ' + number(state.cut) + ' × ' + number(state.cut) + ' mm' :
       state.shape === 'trapezoid' ? ' · inspringing ' + number(state.cut) + ' mm per zijde' : '');
     const fields = [
@@ -387,13 +448,16 @@
     }
     fields.push([reference ? 'Dikteverloop' : 'Basisdikte gevel / vrij', thicknessText], ['Randdetail', edgeText],
       ['Totale dikte gevel / vrij', model.endThicknessMm.map(n=>number(n)).join(' / ') + ' mm']);
-    const reservations = [state.drain ? 'cirkel met kruis = HWA' : '', state.railing ? 'cirkels op vrije rand = hekwerk' : ''].filter(Boolean).join(' · ');
+    const planKeys = [hasChannel(state) ? 'ingekleurde strook = langsgoot' : '',
+      state.dripGroove ? 'korte streeplijn = waterhol onderzijde' : '',
+      state.drain ? 'cirkel met kruis = HWA-reservering' : '',
+      state.railing ? 'cirkels op vrije rand = hekwerkreserveringen' : ''].filter(Boolean).join(' · ');
     const cm = model.reservations;
     const positions = [];
-    if (cm.drain) positions.push('HWA op X ' + number(cm.drain[0], 1));
-    if (cm.railing.length) positions.push('Hekwerk op X ' + cm.railing.map(p => number(p[0], 1)).join(' / '));
-    const positionNote = positions.length ? '<p class="pc-print-detail"><strong>Reserveringen vrije rand</strong> · ' + positions.join(' · ') +
-      ' mm · Y ' + number(state.depth) + ' mm. X vanaf linker buitenmaat, Y vanaf gevel.</p>' : '';
+    if (cm.drain) positions.push('HWA op X ' + number(cm.drain[0]) + ', Y ' + number(cm.drain[1]) + ', Z ' + number(cm.drain[2]) + ' mm');
+    if (cm.railing.length) positions.push('hekwerk op X ' + cm.railing.map(p => number(p[0])).join(' / ') + ', Y ' + number(cm.railing[0][1]) + ' mm');
+    const positionNote = positions.length ? '<p class="pc-print-detail"><strong>Reserveringen</strong> · ' + positions.join(' · ') +
+      '. X vanaf linker buitenmaat, Y vanaf gevel.</p>' : '';
     let profileNote = '';
     if (state.supplier && state.supplier !== 'generic') {
       const profile = window.PrecastProfiles.assess(state, model);
@@ -403,7 +467,7 @@
     return '<header><div><p>Open Precast Concrete Studio</p><h1>' + escape(state.mark || defaultMark) + ' · ' + name +
       '</h1></div><div><strong>Concept-elementtekening</strong><p>' + escape(state.storey || 'Bouwlaag onbekend') +
       ' · maten in mm</p></div></header><div class="pc-sheet-figures">' +
-      figure('Bovenaanzicht', planDrawing, reservations ? 'Reserveringen · ' + reservations : 'A–A geeft de plaats van de doorsnede aan.') +
+      figure('Bovenaanzicht', planDrawing, planKeys || 'A–A geeft de plaats van de doorsnede aan.') +
       figure('Doorsnede A–A', sectionDrawing, 'X = ' + number(state.length / 2, 1) + ' mm vanaf links. Y = 0 aan gevel. Z = 0 op het doorgetrokken loopvlak aan de gevel.') +
       '</div><dl>' + fields.map(([key, value]) => row(key, value)).join('') +
       '</dl>' + positionNote + profileNote + '<footer><strong>Open voor engineering</strong> · wapening, opleg- en ankerdetails, hijspunten en posities van de instortdelen.</footer>';

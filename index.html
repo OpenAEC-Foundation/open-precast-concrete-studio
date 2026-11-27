@@ -2,23 +2,31 @@
 <html lang="nl" data-oa-theme="light">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="connect-src 'self' ipc: http://ipc.localhost https://open-feedback-studio.pages.dev">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Open Precast Concrete Studio</title>
   <link rel="stylesheet" href="public/blueprint/openaec-tokens.css">
   <link rel="stylesheet" href="src/style.css">
   <link rel="stylesheet" href="src/drawings.css">
+  <link rel="stylesheet" href="src/feedback.css">
   <script src="src/model.js" defer></script>
   <script src="src/project.js" defer></script>
   <script src="src/profiles.js" defer></script>
   <script src="src/ifc.js" defer></script>
   <script src="src/drawings.js" defer></script>
   <script src="src/app.js" defer></script>
+  <script src="src/feedback-config.js" defer></script>
+  <script src="src/feedback.js" defer></script>
+  <script src="src/feedback-dialog.js" defer></script>
 </head>
 <body>
 <div class="app-shell">
   <header class="topbar">
     <h1>Open Precast <span>Concrete Studio</span></h1>
     <div class="actions">
+      <button type="button" id="open-feedback" aria-haspopup="dialog" aria-controls="feedback-dialog">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5h14v9.8H9l-4.5 3.3v-3.3H3zM6.5 7h7M6.5 10h4.5"/></svg>Feedback
+      </button>
       <button type="button" id="new-project">Nieuw</button>
       <button type="button" id="open-project">Open ontwerp</button><input id="file-input" type="file" accept=".json" hidden>
       <button type="button" id="save-project">Opslaan</button>
@@ -34,7 +42,7 @@
         <label>Elementtype<select id="element-type"><option value="balcony">Balkonplaat</option><option value="gallery">Galerijplaat</option></select></label>
         <fieldset><legend>Vorm en maatvoering</legend>
           <label>Contour<select id="shape"><option value="rectangle">Rechthoek</option><option value="chamfer">Afgeschuinde vrije hoek</option><option value="trapezoid">Trapezium</option></select></label>
-          <div class="field-pair"><label>Lengte (mm)<input id="length" type="number" step="any" min="400" max="12000" required value="3200"></label><label>Diepte (mm)<input id="depth" type="number" step="any" min="400" max="4000" required value="1600"></label></div>
+          <div class="field-pair"><label>Lengte (mm)<input id="length" type="number" step="any" min="400" max="12000" required value="3200"></label><label>Diepte (mm)<input id="depth" type="number" step="any" min="400" max="5000" required value="1600"></label></div>
           <label id="cut-row" hidden>Contourmaat (mm)<input id="cut" type="number" step="any" min="0" value="300"></label>
           <label>Doorsnedeprofiel<select id="thicknessMode"><option value="constant">Constante dikte</option><option value="linear">Lineair dikteverloop</option><option value="reference">Hi-Con · gemeten doorsnede</option></select></label>
           <p class="field-note" id="reference-note" hidden>Vaste diepte 2.210 mm met gevelneus en waterhol. Het betonprofiel volgt de gemeten snede door het Hi-Con Basic Line-balkon. De lengte langs de gevel blijft instelbaar.</p>
@@ -49,9 +57,23 @@
           </div>
           <label class="check"><input id="upstand" type="checkbox">Opstand aan de gevel</label>
           <div class="field-pair" id="upstand-fields" hidden><label>Hoogte (mm)<input id="upstandHeight" type="number" min="20" max="500" step="any" value="100"></label><label>Breedte (mm)<input id="upstandWidth" type="number" min="20" max="300" step="any" value="80"></label></div>
-          <label class="check"><input id="drain" type="checkbox" checked>HWA-reservering</label>
           <label class="check"><input id="railing" type="checkbox" checked>Hekwerkreserveringen</label>
           <label>Loopvlak<select id="finish"><option value="anti-slip">Antislipstructuur</option><option value="smooth">Glad</option><option value="waffle">Wafelprofiel</option><option value="blasted">Gezandstraald</option></select></label>
+        </fieldset>
+        <fieldset><legend>Afwatering</legend>
+          <label>Langsgoot bovenzijde<select id="channelProfile"><option value="none">Geen langsgoot</option><option value="rect">Rechthoekige goot</option><option value="v">V-goot</option></select></label>
+          <div id="channel-fields" hidden>
+            <div class="field-pair"><label>Gootbreedte (mm)<input id="channelWidth" type="number" step="any" min="1" max="4000" required value="100"></label><label>Gootdiepte (mm)<input id="channelDepth" type="number" step="any" min="1" max="800" required value="15"></label></div>
+            <label>Vrije rand tot gootlip (mm)<input id="channelInset" type="number" step="any" min="0" max="4000" required value="50"></label>
+          </div>
+          <label class="check"><input id="dripGroove" type="checkbox">V-waterhol onderzijde</label>
+          <div id="drip-fields" hidden>
+            <div class="field-pair"><label>Breedte waterhol (mm)<input id="dripWidth" type="number" step="any" min="1" max="4000" required value="15"></label><label>Diepte waterhol (mm)<input id="dripDepth" type="number" step="any" min="1" max="800" required value="8"></label></div>
+            <label>Vrije rand tot waterhol (mm)<input id="dripInset" type="number" step="any" min="0" max="4000" required value="25"></label>
+          </div>
+          <p id="drainage-reference" class="field-note" hidden>Het gemeten Hi-Con-profiel bevat zijn eigen waterhol.</p>
+          <label class="check"><input id="drain" type="checkbox" checked>HWA-reservering</label>
+          <label id="drain-position-field">Positie vanaf links (%)<input id="drainPosition" type="number" min="0" max="100" step="any" required value="66"></label>
         </fieldset>
         <fieldset><legend>Aansluiting en materiaal</legend>
           <label>Aansluitprincipe<select id="support"><option value="isokorf">Koudebrugonderbreking</option><option value="console">Oplegging op consoles</option><option value="columns">Oplegging op kolommen</option><option value="steel">Oplegging op staal</option><option value="nokken">Nokken / stekken</option></select></label>
@@ -78,12 +100,14 @@
       <dl class="quantities">
         <div><dt>Oppervlak in plan</dt><dd id="area-value">—</dd></div>
         <div><dt>Betonvolume</dt><dd id="volume-value">—</dd></div>
+        <div id="cutout-row" hidden><dt>Uitsparingsvolume goot en waterhol</dt><dd id="cutout-value">—</dd></div>
         <div><dt>Indicatieve massa</dt><dd id="mass-value">—</dd></div>
         <div><dt>Verval loopvlak</dt><dd id="drop-value">—</dd></div>
         <div><dt>Dikte gevel / vrije rand</dt><dd id="end-values">—</dd></div>
       </dl>
+      <p id="drain-coordinates" class="field-note" hidden></p>
       <section class="profile"><h3>Fabrikantprofiel</h3>
-        <label class="only-reader" for="supplier">Fabrikantprofiel</label><select id="supplier"><option value="generic">Generiek</option><option value="olbecon">Olbecon</option><option value="vebo">Vebo</option></select>
+        <label class="only-reader" for="supplier">Fabrikantprofiel</label><select id="supplier"><option value="generic">Generiek</option><option value="olbecon">Olbecon</option><option value="vebo">Vebo</option><option value="omg">OMG Prefabbeton</option></select>
         <p id="profile-caption"></p><ul id="profile-checks"></ul><a id="profile-source" target="_blank" rel="noreferrer" hidden>Productspecificatie ↗</a>
       </section>
       <section class="bim-info"><h3>BIM-overdracht</h3><dl><div><dt>IFC4</dt><dd>IfcSlab</dd></div><div><dt>Materiaal</dt><dd>Prefab beton</dd></div><div><dt>NL-SfB-hoofdgroep</dt><dd>23 · Vloeren</dd></div><div><dt>Uitwerking</dt><dd>Coördinatie</dd></div></dl></section>
@@ -93,5 +117,53 @@
   <footer id="status" role="status" aria-live="polite">Ontwerp geopend</footer>
 </div>
 <div id="print-sheet"></div>
+<dialog id="feedback-dialog" aria-labelledby="feedback-title">
+  <header class="feedback-head">
+    <h2 id="feedback-title" tabindex="-1">Feedback</h2>
+    <button type="button" id="feedback-close" aria-label="Feedback sluiten">Sluiten</button>
+  </header>
+  <form id="feedback-form" novalidate autocomplete="off">
+    <div class="feedback-notice">
+      <p>Je melding wordt een openbaar issue op GitHub in <strong>OpenAEC-Foundation/open-precast-concrete-studio</strong>. Zet er niets in dat je niet wilt delen. Je e-mailadres komt niet in het issue. Je hebt geen GitHub-account nodig.</p>
+    </div>
+    <p id="feedback-registration" role="status" hidden>Feedback verzenden is nog niet beschikbaar. De registratie van deze app bij Open Feedback Studio is nog niet bevestigd.</p>
+    <fieldset id="feedback-fields" aria-label="Melding">
+      <label for="feedback-category">Soort melding
+        <select id="feedback-category" name="category">
+          <option value="bug">Fout</option><option value="feature">Idee</option><option value="general">Vraag of opmerking</option>
+        </select>
+      </label>
+      <div class="feedback-message">
+        <label for="feedback-message">Bericht</label>
+        <textarea id="feedback-message" name="message" rows="4" maxlength="5000" required aria-describedby="feedback-limits feedback-counter"></textarea>
+        <div class="feedback-limits"><span id="feedback-limits">10 tot 5.000 tekens</span><span id="feedback-counter">0 / 5.000</span></div>
+      </div>
+      <div class="feedback-contact">
+        <label for="feedback-email">E-mailadres (optioneel)
+          <input type="email" id="feedback-email" name="email" aria-describedby="feedback-email-note"><small id="feedback-email-note">Alleen als je een reactie wilt.</small>
+        </label>
+        <label for="feedback-fullname">Naam (optioneel)
+          <input type="text" id="feedback-fullname" name="fullname" aria-describedby="feedback-name-note"><small id="feedback-name-note">Je naam kan bij de melding getoond worden.</small>
+        </label>
+      </div>
+      <label for="feedback-sentiment">Hoe bevalt het? (optioneel)
+        <select id="feedback-sentiment" name="sentiment">
+          <option value="">Geen antwoord</option><option value="Frustrated">Gefrustreerd</option><option value="Neutral">Neutraal</option><option value="Happy">Tevreden</option>
+        </select>
+      </label>
+    </fieldset>
+    <p class="feedback-context">Je verstuurt alleen je invoer en de appnaam met versie <span id="feedback-version"></span>. De app stuurt geen projectdata, bestandsinhoud, paden of gebruikersnamen automatisch mee.</p>
+    <div class="feedback-submit-row">
+      <p id="feedback-state" role="status" aria-live="polite"></p>
+      <button type="submit" class="primary" id="feedback-submit" disabled>Versturen</button>
+    </div>
+  </form>
+  <section id="feedback-receipt" aria-labelledby="feedback-thanks" hidden>
+    <h3 id="feedback-thanks" tabindex="-1">Bedankt voor je feedback!</h3>
+    <p id="feedback-confirmation"></p>
+    <a id="feedback-issue" target="_blank" rel="noopener noreferrer" hidden>Bekijk op GitHub</a>
+    <p id="feedback-link-error" role="status"></p>
+  </section>
+</dialog>
 </body>
 </html>

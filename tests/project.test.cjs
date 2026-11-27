@@ -15,6 +15,14 @@ test('both reference profiles, exact and exceeded boundaries and gallery scope',
   assert.deepEqual(check({...state,supplier:'vebo',slope:1}).checks.map(v => v.warning), [true,true]);
 });
 
+test('OMG compares general production dimensions and shows coordination for the drain', () => {
+  const gallery = {...project.defaults,supplier:'omg','element-type':'gallery',length:10000,depth:4500,thickness:120};
+  const compare = state => profiles.assess(state,project.validate(state)).checks.map(check => check.warning);
+  assert.deepEqual(compare(gallery),[false,false,false,true]);
+  assert.deepEqual(compare({...gallery,channelProfile:'v'}),[false,false,false,false]);
+  assert.deepEqual(compare({...gallery,length:10001,depth:4501,thickness:220,channelProfile:'rect',drain:false}),[true,true,true,true]);
+});
+
 test('current project format preserves state and identity after revisions', () => {
   const state = {...project.defaults, shape:'trapezoid', upstand:true, mark:"BP 'Zuid'"};
   const json = project.encode(state, id, 'Project Zuid');
@@ -46,6 +54,21 @@ test('every accepted project UUID remains usable as the IFC slab identity', () =
   const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
   const parsed = [...guid].reduce((result, c) => result * 64n + BigInt(alphabet.indexOf(c)), 0n);
   assert.equal(parsed.toString(16), identity.replaceAll('-', ''));
+});
+
+test('the 0.4.1 Windows example retains its measured waterhol and identity on upgrade', () => {
+  const record = require('../examples/BP-P01.opc.json');
+  assert.equal(record.schema,'open-precast-concrete-studio/0.3');
+  const restored = project.decode(JSON.stringify(record));
+  assert.equal(restored.identity,record.identity);
+  assert.equal(restored.state.thicknessMode,'reference');
+  assert.equal(restored.state.channelProfile,'none');
+  assert.equal(restored.state.dripGroove,false);
+  assert.equal(restored.state.drainPosition,66);
+  assert.ok(Math.abs(project.validate(restored.state).volumeM3 - 0.42599196163) < 1e-10);
+  const encoded = project.encode(restored.state,restored.identity,restored.name);
+  assert.equal(JSON.parse(encoded).schema,'open-precast-concrete-studio/0.4');
+  assert.deepEqual(project.decode(encoded),restored);
 });
 
 test('existing concept 0.1 stays editable and gains a stable ID on first save', () => {

@@ -201,6 +201,28 @@ async function main() {
     await control('export-ifc').click();
     assert.equal(await control('status').innerText(), 'IFC-export mislukt. Schijf vol');
     assert.equal(await control('mark').inputValue(), 'BP-P01');
+
+    const drainageExample = path.resolve(__dirname,'../examples/GP-A01.opc.json');
+    await control('file-input').setInputFiles(drainageExample);
+    await page.waitForFunction(() => document.getElementById('mark').value === 'GP-A01');
+    await page.reload();
+    assert.equal(await control('mark').inputValue(),'GP-A01');
+    assert.equal(await control('channelProfile').inputValue(),'rect');
+    assert.equal(await control('dripGroove').isChecked(),true);
+    assert.equal(await control('volume-value').innerText(),'1,077 m³');
+    assert.equal(await control('cutout-value').innerText(),'8,870 L');
+    assert.match(await control('drain-coordinates').innerText(),/X 720,0 \/ Y 1.680,0 \/ Z -45,2 mm/);
+    await control('drainPosition').fill('75');
+    assert.match(await control('drain-coordinates').innerText(),/X 2.700,0/);
+    assert.equal(await control('volume-value').innerText(),'1,077 m³');
+    await control('channelDepth').fill('200');
+    assert.equal(await control('export-ifc').isDisabled(),true);
+    assert.equal(await control('print-drawing').isDisabled(),true);
+    assert.equal(await control('volume-value').innerText(),'—');
+    await control('channelDepth').fill('20');
+    assert.equal(await control('export-ifc').isEnabled(),true);
+    await page.reload();
+    assert.equal(await control('drainPosition').inputValue(),'75');
     assert.deepEqual(errors,[]);
     if (process.argv.includes('--examples')) {
       const target = path.resolve(__dirname,'../examples');

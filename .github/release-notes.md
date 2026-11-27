@@ -1,11 +1,12 @@
-# Open Precast Concrete Studio 0.4.1 voor Windows
+# Open Precast Concrete Studio 0.5.0 voor Windows
 
-Download **Open-Precast-Concrete-Studio-0.4.1-windows-x64-setup.exe**, voer de installer uit en open **Open Precast Concrete Studio** vanuit Start. De app installeert voor je eigen Windows-account.
+Sluit Open Precast Concrete Studio en voer **Open-Precast-Concrete-Studio-0.5.0-windows-x64-setup.exe** uit om je bestaande installatie bij te werken. De app opent ook ontwerpen uit 0.4.1 met behoud van hun IFC-identiteit.
 
-De installer gebruikt Microsoft Edge WebView2 en downloadt de runtime als die op de computer ontbreekt. Deze release heeft een ongesigneerde installer. Windows kan de uitgever als onbekend tonen.
+- Teken een rechthoekige langsgoot of V-goot bovenin en een afzonderlijk V-waterhol onderin de plaat. Breedte, diepte en afstand tot de vrije rand zijn instelbaar. Beide uitsparingen tellen mee in het netto betonvolume, de tekening en de IFC4-export.
+- Verplaats de HWA-reservering in de lengterichting. Met een langsgoot komt deze op de gootbodem. Het elementblad en de IFC geven de lokale coördinaten door.
+- Vergelijk balkon- en galerijplaten met de gepubliceerde productiematen van OMG Prefabbeton. [Onderzoek en metingen aan fabrikantbestanden](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/blob/v0.5.0/docs/afwatering.md)
+- Open **Feedback** voor het formulier van Open Feedback Studio. In deze versie wacht de verzendknop op bevestiging van de registratie bij de centrale service.
 
-Teken een balkon- of galerijplaat met een verlopende dikte, een randverdikking of het gemeten Hi-Con-profiel. Kies **Opslaan** voor het bewerkbare ontwerp en **Exporteer IFC4** voor het betonlichaam. In beide gevallen kies je de bestemming in de Windows-dialoog.
+Voorbeeld GP-A01 bevat een uitgewerkte galerijplaat met afwatering. [Bewerkbaar ontwerp](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/raw/refs/tags/v0.5.0/examples/GP-A01.opc.json) · [Elementblad](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/blob/v0.5.0/examples/GP-A01.pdf) · [IFC4](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/raw/refs/tags/v0.5.0/examples/GP-A01.ifc)
 
-De installatietest tekent een balkonplaat in de geïnstalleerde app en opent de export met IfcOpenShell om de maatvoering en het betonvolume te controleren.
-
-De afzonderlijke ZIP bevat de offline-webversie met voorbeeldontwerpen, elementbladen en IFC-bestanden. Pak deze volledig uit en open `index.html`. De SHA-256-controlesommen van de installer en de ZIP staan in `SHA256SUMS.txt`.
+De ZIP bevat de offline-webversie en alle voorbeelden. De SHA-256-controlesommen van de installer en de ZIP staan in `SHA256SUMS.txt`. De installer gebruikt WebView2 en heeft geen Authenticode-handtekening.
