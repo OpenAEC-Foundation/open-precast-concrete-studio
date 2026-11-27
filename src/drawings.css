@@ -21,6 +21,8 @@
 .pc-drawing .pc-edge-detail { stroke: var(--pc-edge); stroke-width: 1.1; fill: none; }
 .pc-drawing .pc-detail-break { stroke: var(--pc-paper); stroke-width: 2.5; stroke-dasharray: 5 4; fill: none; }
 .pc-key.underside { height: 0; border-bottom: 1.5px dashed var(--ink); }
+.pc-drawing .pc-rebate, .pc-key.rebate { fill: color-mix(in srgb, var(--line-strong) 38%, var(--panel)); stroke: var(--pc-edge); stroke-width: 1; }
+.pc-key.rebate { height: 6px; background: color-mix(in srgb, var(--line-strong) 38%, var(--panel)); border: 1px solid var(--ink); }
 .pc-drawing .pc-rail { stroke: var(--warning); stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
 .pc-drawing .pc-socket { stroke: var(--warning); fill: var(--panel); stroke-width: 1.5; }
 .pc-drawing .pc-drain { stroke: var(--blue); fill: var(--panel); stroke-width: 2; }
@@ -59,17 +61,12 @@
 .pc-key.drip-groove { height: 0; border-bottom: 1.5px dotted var(--ink); }
 .pc-key.drain, .pc-key.railing { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--blue); }
 .pc-key.railing { border-color: var(--warning); }
-#legend { font-size: 11px; bottom: 26px; max-width: calc(100% - 36px); }
 .view-legend span { display: inline-flex; align-items: center; gap: 5px; }
 #print-sheet { display: none; }
 
 @media screen and (max-width: 620px) {
-  .canvas { grid-template: minmax(0,1fr) auto / minmax(0,1fr); align-content: stretch; }
-  .canvas .pc-drawing { grid-row: 1; height: 100%; max-height: 100%; }
-  .canvas #legend { grid-row: 2; position: static; max-width: 100%; justify-self: start; padding: 2px 10px 6px; gap: 2px 9px; }
   .pc-drawing text.pc-tag, .pc-drawing text.pc-dim-label { font-size: 23px; }
   .pc-drawing .pc-profile-panel text.pc-tag { font-size: 17px; }
-  #legend { bottom: 8px; }
 }
 
 @page { size: A4 landscape; margin: 10mm; }

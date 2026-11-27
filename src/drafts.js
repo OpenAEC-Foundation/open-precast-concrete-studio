@@ -1,8 +1,10 @@
 // Each open editor writes to its own slot. Older apps still use the single legacy key.
 (() => {
   'use strict';
-  const prefix = 'openaec.precast.drafts.v1.';
-  const active = 'openaec.precast.activeDraft.v1';
+  const prefix = 'openaec.precast.drafts.v2.';
+  const previousPrefix = 'openaec.precast.drafts.v1.';
+  const active = 'openaec.precast.activeDraft.v2';
+  const previousActive = 'openaec.precast.activeDraft.v1';
   const legacy = 'openaec.precast.design.v2';
   let selected = null;
   let writable = null;
@@ -10,7 +12,7 @@
   function entries() {
     const result = [];
     for (const key of Object.keys(localStorage)) {
-      if (!key.startsWith(prefix)) continue;
+      if (!key.startsWith(prefix) && !key.startsWith(previousPrefix)) continue;
       const raw = localStorage.getItem(key);
       try {
         const record = JSON.parse(raw);
@@ -50,7 +52,8 @@
     let tabKey;
     try { tabKey = sessionStorage.getItem(active); } catch { /* Use the last opened draft. */ }
     const chosen = available.find(e => e.key === tabKey) ||
-      available.find(e => e.key === localStorage.getItem(active)) || available[0];
+      available.find(e => e.key === localStorage.getItem(active)) ||
+      available.find(e => e.key === localStorage.getItem(previousActive)) || available[0];
     selected = chosen?.key || null;
     if (chosen) {
       try { localStorage.setItem(active, chosen.key); } catch { /* Raw records remain recoverable. */ }

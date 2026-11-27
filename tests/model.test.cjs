@@ -431,3 +431,37 @@ test('ongeldige waterdetails en onderbroken doorsneden worden geweigerd', () => 
     {thicknessMode:'reference',slope:1,depth:2210,channelProfile:'rect'}
   ]) assert.throws(() => build({...base,...patch}), Error);
 });
+
+test('gevelsponning loopt met afschot en onderverdikking over de volle plaatbreedte', () => {
+  const state = {...base,facadeRebate:true,rebateWidth:120,rebateDepth:30,
+    depth:1800,thicknessMode:'linear',freeThickness:120,edgeProfile:'bevel',edgeSide:'facade',edgeWidth:500,edgeDrop:60};
+  const plate = build(state);
+  close(plate.volumeM3,.900480,'0,864 basis + 0,048 verdikking − 0,01152 sponning');
+  close(auditMesh(plate.parts[0].faces),.900480,'Gesloten betonlichaam');
+  assert.deepEqual(plate.endThicknessMm,[210,120]);
+  assert.deepEqual(plate.sectionRing.filter(([y])=>y===120).slice(0,2),[[120,-31.8],[120,-1.8]]);
+  for (const shape of ['rectangle','trapezoid','chamfer']) {
+    const testState = {...state,shape,depth:600,cut:250,rebateWidth:450};
+    const result = build(testState), plain = build({...testState,facadeRebate:false});
+    // The chamfer starts 350 mm from the facade, cutting a 100 x 100 triangle
+    // from the rebate. A trapezoid widens from 2700 mm to 3075 at the shoulder.
+    const area = {rectangle:3200*450,trapezoid:(2700+3075)*450/2,chamfer:3200*450-100*100/2}[shape];
+    const expected = plain.volumeM3 - area*30/1e9;
+    close(result.rebateVolumeM3,area*30/1e9,'Uitgespaard volume');
+    close(result.volumeM3,expected,'Netto volume');
+    close(auditMesh(result.parts[0].faces),expected,'Volume van gesloten mesh');
+  }
+});
+
+test('gevelsponning bewaakt schouder, kern en overlap met andere randdetails', () => {
+  const state = {...base,facadeRebate:true,rebateWidth:120,rebateDepth:30};
+  for (const patch of [{rebateWidth:0},{rebateWidth:1600},{rebateDepth:0},{rebateDepth:180},{upstand:true},
+    {thicknessMode:'reference',slope:1,depth:2210}, {channelProfile:'v',channelWidth:90,channelInset:1400},
+    {dripGroove:true,dripWidth:20,dripInset:1500,dripDepth:150}]) {
+    assert.throws(()=>build({...state,...patch}), Error);
+  }
+  const adjacent = {...state,channelProfile:'rect',channelInset:1400,channelWidth:80,channelDepth:30.00001};
+  const joined = build(adjacent);
+  assert.deepEqual(joined.parts,build({...adjacent,channelDepth:30}).parts,'Aansluitende vloeren binnen IFC-precisie');
+  close(auditMesh(joined.parts[0].faces),joined.volumeM3,'Gedeelde vloer blijft gesloten');
+});

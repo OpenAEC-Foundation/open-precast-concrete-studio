@@ -44,6 +44,47 @@ async function main() {
       }
     }
     await verify(1600,180,180,288000);
+    await set('depth',1800);
+    await select('thicknessMode','linear');
+    await set('freeThickness',120);
+    await select('edgeProfile','bevel');
+    await select('edgeSide','facade');
+    await set('edgeWidth',500);
+    await set('edgeDrop',60);
+    await page.check('#facadeRebate');
+    await set('rebateWidth',120);
+    await set('rebateDepth',30);
+    await verify(1800,210,120,281400);
+    assert.match(await page.locator('#cutout-value').innerText(),/11,520? L/);
+    for (const prefix of ['#section-view','#print-sheet']) {
+      const panel = page.locator(prefix+' polygon[data-section="rebate"]');
+      assert.match(await panel.locator('..').textContent(),/B × D 120 × 30 mm/);
+      const detail = await points(panel);
+      const xs = [...new Set(detail.map(p=>p[0]))].sort((a,b)=>a-b);
+      const left = xs[0], shoulder = xs[1], border = xs.at(-1);
+      const scale = (border-left)/(120*1.4);
+      assert.ok(Math.abs((shoulder-left)/scale-120)<.002,'Breedte in het vergrote detail');
+      const levels = detail.filter(p=>p[0]===shoulder).map(p=>p[1]).sort((a,b)=>a-b);
+      assert.ok(Math.abs((levels[1]-levels[0])/scale-30)<.002,'Verticale diepte bij de schouder');
+    }
+    for (const prefix of ['#plan-view','#print-sheet figure:first-child']) {
+      const contour = await points(page.locator(prefix+' polygon.pc-concrete').first());
+      const strip = await points(page.locator(prefix+' polygon[data-plan="rebate"]'));
+      assert.equal(await page.locator(prefix+' [data-dimension="rebate"] text').textContent(),'120');
+      const spanY = list => Math.max(...list.map(p=>p[1]))-Math.min(...list.map(p=>p[1]));
+      assert.ok(Math.abs(1800*spanY(strip)/spanY(contour)-120)<.002,'Gevelstrook op schaal');
+    }
+    await page.check('#upstand');
+    assert.ok(await page.locator('#export-ifc').isDisabled());
+    assert.match(await page.locator('#invalid').innerText(),/gevelopstand en gevelsponning/);
+    await page.uncheck('#upstand');
+    await select('thicknessMode','reference');
+    assert.ok(await page.locator('#facadeRebate').isDisabled());
+    await select('thicknessMode','linear');
+    assert.ok(await page.locator('#facadeRebate').isChecked());
+    await verify(1800,210,120,281400);
+    await page.uncheck('#facadeRebate');
+    await select('edgeProfile','none');
     await select('thicknessMode','linear');
     await set('depth',2200);
     await set('thickness',110);

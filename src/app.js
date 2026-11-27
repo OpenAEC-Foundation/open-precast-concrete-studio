@@ -4,8 +4,9 @@
   const fields = Object.keys(PrecastProject.defaults);
   const typeNames = {balcony:'Balkonplaat', gallery:'Galerijplaat'};
   const drainageFields = ['channelProfile','channelWidth','channelDepth','channelInset','dripGroove','dripWidth','dripDepth','dripInset'];
-  const profileFields = ['depth','slope','thickness','freeThickness','edgeProfile','edgeSide','edgeWidth','edgeDrop','upstand','upstandWidth','upstandHeight',...drainageFields];
-  const referenceSettings = {depth:2210, slope:1, thickness:109.2, freeThickness:65, edgeProfile:'none', upstand:false, channelProfile:'none', dripGroove:false};
+  const rebateFields = ['facadeRebate','rebateWidth','rebateDepth'];
+  const profileFields = ['depth','slope','thickness','freeThickness','edgeProfile','edgeSide','edgeWidth','edgeDrop','upstand','upstandWidth','upstandHeight',...drainageFields,...rebateFields];
+  const referenceSettings = {depth:2210, slope:1, thickness:109.2, freeThickness:65, edgeProfile:'none', upstand:false, channelProfile:'none', dripGroove:false, facadeRebate:false};
   const media = matchMedia('(prefers-color-scheme: dark)');
   const useTheme = () => { document.documentElement.dataset.oaTheme = media.matches ? 'dark' : 'light'; };
   useTheme();
@@ -21,6 +22,72 @@
   let validProject = '';
   let changed = false;
   let downloadRevision = -1;
+  const undoSteps = [], redoSteps = [];
+  let present, editingField = null;
+
+  function rawInputs(keys) {
+    return Object.fromEntries(keys.map(key => {
+      const control = get(key);
+      return [key,control.type === 'checkbox' ? control.checked : control.value];
+    }));
+  }
+
+  function snapshot() {
+    return {inputs:rawInputs(fields), manualProfile, validProject};
+  }
+
+  function updateHistoryButtons() {
+    get('undo-edit').disabled = !undoSteps.length;
+    get('redo-edit').disabled = !redoSteps.length;
+  }
+
+  function resetHistory() {
+    undoSteps.length = redoSteps.length = 0;
+    editingField = null;
+    present = snapshot();
+    updateHistoryButtons();
+  }
+
+  function sameInputs(a, b) {
+    return a.manualProfile === b.manualProfile && fields.every(key => a.inputs[key] === b.inputs[key]);
+  }
+
+  function recordEdit(field) {
+    const next = snapshot();
+    if (sameInputs(present,next)) return;
+    if (editingField !== field) {
+      undoSteps.push(present);
+      if (undoSteps.length > 100) undoSteps.shift();
+    }
+    // Group typing, deleting and spinner input until this field is committed.
+    editingField = ['number','text'].includes(field.type) ? field : null;
+    if (sameInputs(undoSteps.at(-1),next)) {
+      undoSteps.pop();
+      editingField = null;
+    }
+    present = next;
+    redoSteps.length = 0;
+    updateHistoryButtons();
+  }
+
+  function applyEdit(steps, opposite) {
+    if (!steps.length) return;
+    opposite.push(present);
+    present = steps.pop();
+    editingField = null;
+    ++importNumber;
+    changed = true;
+    validProject = present.validProject;
+    manualProfile = present.manualProfile;
+    setControls(present.inputs);
+    refresh();
+    remember();
+    updateHistoryButtons();
+    if (locallySaved && currentModel) {
+      setStatus(steps === undoSteps ? 'Bewerking ongedaan gemaakt · werkversie bewaard' :
+        'Bewerking opnieuw uitgevoerd · werkversie bewaard');
+    }
+  }
 
   function readControls() {
     return Object.fromEntries(fields.map(key => {
@@ -84,7 +151,8 @@
     get('thickness-label').textContent = state.thicknessMode === 'linear' ? 'Bij gevel (mm)' : 'Plaatdikte (mm)';
     get('reference-note').hidden = !reference;
     get('edge-fields').hidden = state.edgeProfile === 'none';
-    for (const id of ['depth','slope','edgeProfile','upstand','channelProfile','dripGroove']) get(id).disabled = reference;
+    for (const id of ['depth','slope','edgeProfile','upstand','channelProfile','dripGroove','facadeRebate']) get(id).disabled = reference;
+    get('rebate-fields').hidden = !state.facadeRebate;
     get('drainage-reference').hidden = !reference;
     get('channel-fields').hidden = state.channelProfile === 'none';
     get('drip-fields').hidden = !state.dripGroove;
@@ -101,8 +169,8 @@
     for (const id of ['print-drawing','save-project','export-ifc']) get(id).disabled = false;
     get('area-value').textContent = format(model.areaM2, 2) + ' m²';
     get('volume-value').textContent = format(model.volumeM3, 3) + ' m³';
-    get('cutout-row').hidden = state.channelProfile === 'none' && !state.dripGroove;
-    get('cutout-value').textContent = format((model.channelVolumeM3 + model.dripVolumeM3) * 1000, 3) + ' L';
+    get('cutout-row').hidden = state.channelProfile === 'none' && !state.dripGroove && !state.facadeRebate;
+    get('cutout-value').textContent = format((model.channelVolumeM3 + model.dripVolumeM3 + model.rebateVolumeM3) * 1000, 3) + ' L';
     const outlet = model.reservations.drain;
     get('drain-coordinates').hidden = !outlet;
     if (outlet) {
@@ -124,10 +192,7 @@
     const record = JSON.parse(validProject);
     if (manualProfile) record.manualProfile = manualProfile;
     if (!currentModel) {
-      record.unfinished = Object.fromEntries(fields.map(key => {
-        const input = get(key);
-        return [key, input.type === 'checkbox' ? input.checked : input.value];
-      }));
+      record.unfinished = rawInputs(fields);
     }
     return JSON.stringify(record);
   }
@@ -162,10 +227,7 @@
     if (event.target.id === 'thicknessMode') {
       if (get('thicknessMode').value === 'reference') {
         // Keep raw inputs so an unfinished edit can also be resumed.
-        manualProfile = Object.fromEntries(profileFields.map(key => {
-          const control = get(key);
-          return [key, control.type === 'checkbox' ? control.checked : control.value];
-        }));
+        manualProfile = rawInputs(profileFields);
         setControls(referenceSettings, Object.keys(referenceSettings));
       } else if (manualProfile) {
         setControls(manualProfile, profileFields);
@@ -186,6 +248,7 @@
     const inactiveFields = [
       ...(get('edgeProfile').value === 'none' ? ['edgeWidth','edgeDrop'] : []),
       ...(!get('upstand').checked ? ['upstandWidth','upstandHeight'] : []),
+      ...(!get('facadeRebate').checked ? ['rebateWidth','rebateDepth'] : []),
       ...(get('channelProfile').value === 'none' ? ['channelWidth','channelDepth','channelInset'] : []),
       ...(!get('dripGroove').checked ? ['dripWidth','dripDepth','dripInset'] : []),
       ...(!get('drain').checked ? ['drainPosition'] : [])
@@ -196,13 +259,16 @@
     }
     refresh();
     remember();
+    recordEdit(event.target);
   }
 
   function setView(next) {
     view = next;
     document.querySelectorAll('[data-view]').forEach(button =>
       button.setAttribute('aria-pressed', String(button.dataset.view === next)));
-    get('view-caption').textContent = {iso:'Sleep om te draaien',plan:'Maten in mm',section:'Doorsnede A–A'}[next];
+    get('view-caption').textContent = next === 'iso'
+      ? 'Slepen of pijltjestoetsen draait het model. Houd Shift ingedrukt om te schuiven. Home herstelt de kijkrichting.'
+      : (next === 'plan' ? 'Maten in mm. ' : 'Doorsnede A–A. ') + 'Sleep of gebruik de pijltjestoetsen om te schuiven.';
     if (currentModel) PrecastDrawings.render(currentModel.state, currentModel, next);
   }
 
@@ -218,6 +284,10 @@
     setStatus('Download aangeboden · ' + link.download);
   }
 
+  function documentMark() {
+    return get('mark').value.trim().replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
+  }
+
   async function saveDocument(kind) {
     const isIfc = kind === 'ifc';
     if (!currentModel && (isIfc || locallySaved)) return;
@@ -228,8 +298,7 @@
       if (isIfc) contents = PrecastIFC.export(state, currentModel, identity);
       else if (locallySaved) contents = PrecastProject.encode(state, identity, projectName);
       else contents = draftContents();
-      const mark = get('mark').value.trim().replace(/[^\p{L}\p{N}._-]+/gu,'-').slice(0,60) || 'element';
-      const suggestedName = mark + (isIfc ? '.ifc' : '.opc.json');
+      const suggestedName = documentMark() + (isIfc ? '.ifc' : '.opc.json');
       const desktop = window.__TAURI__?.core;
       if (desktop) {
         const saved = await desktop.invoke('save_document', {kind, suggestedName, contents});
@@ -266,6 +335,21 @@
   get('parameters').addEventListener('input', updateField);
   get('parameters').addEventListener('submit', event => event.preventDefault());
   get('supplier').addEventListener('input', updateField);
+  document.addEventListener('focusout', event => {
+    if (event.target === editingField) editingField = null;
+  });
+  get('undo-edit').addEventListener('click', () => applyEdit(undoSteps,redoSteps));
+  get('redo-edit').addEventListener('click', () => applyEdit(redoSteps,undoSteps));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && event.target === editingField) editingField = null;
+    if (event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) ||
+        document.querySelector('dialog[open], .app-shell[inert]') || event.target.closest('input,select,textarea,[contenteditable]')) return;
+    const key = event.key.toLowerCase();
+    if (key !== 'z' && !(key === 'y' && !event.shiftKey)) return;
+    event.preventDefault();
+    if (key === 'z' && !event.shiftKey) applyEdit(undoSteps,redoSteps);
+    else applyEdit(redoSteps,undoSteps);
+  });
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
   get('open-project').addEventListener('click', () => get('file-input').click());
   get('file-input').addEventListener('change', event => {
@@ -275,16 +359,51 @@
   });
   get('save-project').addEventListener('click', () => saveDocument('project'));
   get('export-ifc').addEventListener('click', () => saveDocument('ifc'));
-  get('print-drawing').addEventListener('click', () => { if (currentModel) window.print(); });
+  get('print-drawing').addEventListener('click', async () => {
+    if (!currentModel) return;
+    const desktop = window.__TAURI__?.core;
+    if (!desktop) { window.print(); return; }
+    const shell = document.querySelector('.app-shell');
+    if (shell.inert) return;
+    shell.inert = true;
+    try {
+      const saved = await desktop.invoke('export_sheet_pdf', {suggestedName:documentMark() + '.pdf'});
+      setStatus(saved ? 'Elementblad als PDF opgeslagen' : 'PDF-export geannuleerd');
+    } catch (error) {
+      setStatus('PDF-export mislukt. ' + (error.message || error));
+    } finally {
+      shell.inert = false;
+      get('print-drawing').focus();
+    }
+  });
+  get('profile-source').addEventListener('click', async event => {
+    const desktop = window.__TAURI__?.core;
+    if (!desktop) return;
+    event.preventDefault();
+    try {
+      await desktop.invoke('open_supplier_source', {url:event.currentTarget.href});
+    } catch {
+      setStatus('Openen van de productspecificatie is mislukt. Je kunt het linkadres kopiëren.');
+    }
+  });
   get('new-project').addEventListener('click', () => {
-    if (!canSwitch() || !confirm('Een nieuw element starten?')) return;
+    get('new-element-form').reset();
+    get('new-element-dialog').showModal();
+  });
+  get('cancel-element').addEventListener('click', () => get('new-element-dialog').close());
+  get('new-element-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!canSwitch()) return;
     importNumber++;
     manualProfile = null;
     identity = PrecastIFC.newIdentity();
     projectName = '';
     changed = false;
-    setControls(PrecastProject.defaults);
+    setControls(PrecastTemplates.selected());
+    PrecastViewport.reset();
     refresh(); setView('iso'); remember(true);
+    resetHistory();
+    get('new-element-dialog').close();
     if (locallySaved) setStatus('Nieuw element aangemaakt');
   });
 
@@ -295,10 +414,16 @@
   function restore(content, loaded = PrecastProject.decode(content, PrecastIFC.newIdentity)) {
     const record = JSON.parse(content);
     const backup = record.manualProfile;
-    if (backup && record.schema === 'open-precast-concrete-studio/0.3') {
-      for (const key of drainageFields) {
-        const value = PrecastProject.defaults[key];
-        backup[key] = get(key).type === 'checkbox' ? value : String(value);
+    const migrationFields = [];
+    if (record.schema === 'open-precast-concrete-studio/0.3') {
+      migrationFields.push(...drainageFields);
+      if (record.unfinished && typeof record.unfinished === 'object') record.unfinished.drainPosition = String(loaded.state.drainPosition);
+    }
+    if (['open-precast-concrete-studio/0.3','open-precast-concrete-studio/0.4'].includes(record.schema)) migrationFields.push(...rebateFields);
+    for (const key of migrationFields) {
+      const value = get(key).type === 'checkbox' ? loaded.state[key] : String(loaded.state[key]);
+      for (const inputs of [backup,record.unfinished]) {
+        if (inputs && typeof inputs === 'object') inputs[key] = value;
       }
     }
     identity = loaded.identity;
@@ -306,7 +431,9 @@
     validProject = PrecastProject.encode(loaded.state, identity, projectName);
     manualProfile = hasInputs(backup,profileFields) ? backup : null;
     setControls(hasInputs(record.unfinished,fields) ? record.unfinished : loaded.state);
+    PrecastViewport.reset();
     refresh();
+    resetHistory();
   }
 
   let listed = [];
@@ -373,5 +500,6 @@
     initialStatus = 'Lokale werkversie kon niet worden geopend. Kijk bij Werkversies om een kopie te bewaren.';
   }
   setView(view);
+  resetHistory();
   if (locallySaved) setStatus(initialStatus);
 })();

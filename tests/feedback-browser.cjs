@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const {pathToFileURL} = require('node:url');
 const {chromium} = require('playwright');
 
@@ -45,6 +46,15 @@ async function main() {
     assert.ok(await el('feedback-registration').isVisible());
     assert.ok(await el('feedback-submit').isDisabled());
     await el('feedback-form').evaluate(form=>form.requestSubmit());
+    assert.ok(await el('feedback-public-notice').isHidden());
+    await el('feedback-message').fill('Concept zonder netwerk voor de test.');
+    assert.equal(await el('feedback-submit').innerText(), 'Concept opslaan');
+    const [file] = await Promise.all([page.waitForEvent('download'), el('feedback-submit').click()]);
+    assert.equal(file.suggestedFilename(), 'feedbackconcept.txt');
+    const contents = await fs.readFile(await file.path(),'utf8');
+    assert.match(contents,/Open Precast Concrete Studio 1\.2\.3/);
+    assert.match(contents,/Concept zonder netwerk voor de test\./);
+    assert.doesNotMatch(contents,/PRIVE-PROJECT-TEST|E-mailadres|Naam:/);
     assert.equal(requests.length,0);
     await page.keyboard.press('Escape');
     assert.equal(await active(),'open-feedback');

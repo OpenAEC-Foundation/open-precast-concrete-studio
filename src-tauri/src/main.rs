@@ -3,6 +3,9 @@
 use std::io::Write;
 use std::path::Path;
 
+#[cfg(windows)]
+mod sheet_pdf;
+
 #[tauri::command]
 async fn save_document(
     window: tauri::WebviewWindow,
@@ -13,6 +16,7 @@ async fn save_document(
     let (title, filter, extension) = match kind.as_str() {
         "ifc" => ("IFC4 exporteren", "IFC-model", "ifc"),
         "project" => ("Ontwerp opslaan", "Open Precast-ontwerp", "json"),
+        "feedback" => ("Feedbackconcept opslaan", "Tekstbestand", "txt"),
         _ => return Err("Onbekend documenttype.".into()),
     };
     let name = Path::new(&suggested_name)
@@ -50,9 +54,44 @@ fn open_feedback_issue(url: String) -> Result<(), String> {
     open::that_detached(parsed.as_str()).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn open_supplier_source(url: String) -> Result<(), String> {
+    const SOURCES: [&str; 3] = [
+        "https://www.olbecon.nl/prefab/balkons-en-galerijplaten",
+        "https://www.omgprefabbeton.be/",
+        "https://www.vebo.nl/balkonconcept",
+    ];
+    if !SOURCES.contains(&url.as_str()) {
+        return Err("Onbekende productspecificatie.".into());
+    }
+    open::that_detached(url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn export_sheet_pdf(
+    window: tauri::WebviewWindow,
+    suggested_name: String,
+) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        sheet_pdf::save(&window, &suggested_name).await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = suggested_name;
+        window.print().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![save_document, open_feedback_issue])
+        .invoke_handler(tauri::generate_handler![
+            save_document,
+            open_feedback_issue,
+            open_supplier_source,
+            export_sheet_pdf
+        ])
         .run(tauri::generate_context!())
         .expect("Open Precast Concrete Studio kon niet starten");
 }

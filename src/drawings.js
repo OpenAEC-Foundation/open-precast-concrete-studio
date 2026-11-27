@@ -91,6 +91,7 @@
     let drawing = def + polygon(contour, 'pc-concrete');
     if (def) drawing += polygon(contour, 'pc-surface', 'fill="url(#' + prefix + '-finish)"');
     if (model.upstandOutline?.length) drawing += polygon(model.upstandOutline.map(map), 'pc-curb');
+    if (model.rebateOutline?.length) drawing += polygon(model.rebateOutline.map(map), 'pc-rebate', 'data-plan="rebate"');
     if (model.edgeOutline?.length) drawing += polygon(model.edgeOutline.map(map), 'pc-hidden-edge');
     if (model.channelOutline?.length) {
       drawing += polygon(model.channelOutline.map(map), 'pc-channel', 'data-plan="channel"');
@@ -122,7 +123,17 @@
       label(sectionX + 8, ll[1] - 15, 'A', 'pc-tag', 'start') +
       label(sectionX + 8, front[1] + 16, 'A', 'pc-tag', 'start');
     drawing += dimension(front, free, 42, number(length)) +
-      dimension(ll, front, 35, number(depth));
+      dimension(ll, front, state.facadeRebate ? 60 : 35, number(depth));
+    if (state.facadeRebate) {
+      const strip = model.rebateOutline;
+      const y = Math.max(...strip.map(p => p[1]));
+      const leftShoulder = Math.min(...strip.filter(p => p[1] === y).map(p => p[0]));
+      const shoulder = map([0,y]);
+      drawing += '<g data-dimension="rebate"><title>Breedte gevelsponning</title>' +
+        dimension(ll,shoulder,26,number(y)) +
+        (leftX > 0 ? line(ll,wallLeft,'pc-extension') : '') +
+        (leftShoulder > 0 ? line(shoulder,map([leftShoulder,y]),'pc-extension') : '') + '</g>';
+    }
     if (slope > 0) {
       const sx = right[0] + 20, sy = (ll[1] + front[1]) / 2;
       drawing += line([sx, sy - 10], [sx, sy + 12], 'pc-flow') +
@@ -176,8 +187,8 @@
     const loop = model.sectionRing.map(([y,z]) => [y,-z]);
     const reference = state.thicknessMode === 'reference';
     const profiled = state.edgeProfile !== 'none' && Boolean(state.edgeProfile);
-    const drainage = hasChannel(state) || state.dripGroove;
-    const detailed = reference || profiled || drainage;
+    const cutDetails = hasChannel(state) || state.dripGroove || state.facadeRebate;
+    const detailed = reference || profiled || cutDetails;
     const map = fit(loop, detailed ? {x:110,y:59,w:540,h:118} : {x:110,y:120,w:540,h:170});
     const near = sectionEnd(loop,0), far = sectionEnd(loop,state.depth);
     const deepest = Math.max(...loop.map(p => p[1]));
@@ -194,12 +205,12 @@
     drawing += label(380, detailed ? 23 : 56, fall);
 
     if (reference) drawing += referenceDetails(state, model, loop, hatch);
-    else if (drainage) drawing += drainageDetails(state, model, loop, hatch, profiled);
+    else if (cutDetails) drawing += recessDetails(state, model, loop, hatch, profiled);
     else if (profiled) drawing += edgeDetail(state, model, loop, hatch);
     return drawing;
   }
 
-  function drainageDetails(state, model, loop, hatch, profiled) {
+  function recessDetails(state, model, loop, hatch, profiled) {
     const panels = [];
     // Each enlargement is a clipping of the drawn concrete contour. This keeps
     // the local slopes and intersecting soffit profiles at their real angles.
@@ -214,8 +225,9 @@
       const cut = top ? Math.max(...levels) + backing : Math.min(...levels) - backing;
       panels.push({id,title,contour:clipAt(crop,1,cut,top),
         size:'B × D ' + number(width) + ' × ' + number(depth) + ' mm',
-        position:number(state.depth-end) + ' mm uit vrije rand'});
+        position:id === 'rebate' ? 'Gevelzijde' : number(state.depth-end) + ' mm uit vrije rand'});
     }
+    if (state.facadeRebate) addCut('rebate','Gevelsponning',model.rebateOutline,state.rebateDepth,true);
     if (hasChannel(state)) addCut('channel', state.channelProfile === 'rect' ? 'Rechthoekige langsgoot' : 'V-langsgoot',
       model.channelOutline, state.channelDepth, true);
     if (state.dripGroove) addCut('drip','V-waterhol onderzijde',model.dripOutline,state.dripDepth,false);
@@ -295,7 +307,9 @@
     return drawing;
   }
 
-  const camera = { yaw: 0.52, pitch: 0.49 };
+  const initialOrbit = { yaw: 0.52, pitch: 0.49 };
+  const camera = { ...initialOrbit };
+  const resetOrbit = () => Object.assign(camera, initialOrbit);
   let activeModel;
   const clampPitch = angle => Math.max(-1.35, Math.min(1.35, angle));
 
@@ -385,7 +399,7 @@
     svg.dataset.orbitReady = 'true';
     let drag;
     svg.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || drag) return;
+      if (event.button !== 0 || event.shiftKey || drag) return;
       drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
       svg.setPointerCapture(event.pointerId);
     });
@@ -399,12 +413,13 @@
     });
     svg.addEventListener('lostpointercapture', () => { drag = null; });
     svg.addEventListener('keydown', event => {
+      if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
       switch (event.key) {
         case 'ArrowLeft': camera.yaw -= 0.15; break;
         case 'ArrowRight': camera.yaw += 0.15; break;
         case 'ArrowUp': camera.pitch = clampPitch(camera.pitch + 0.15); break;
         case 'ArrowDown': camera.pitch = clampPitch(camera.pitch - 0.15); break;
-        case 'Home': camera.yaw = 0.52; camera.pitch = 0.49; break;
+        case 'Home': resetOrbit(); break;
         default: return;
       }
       event.preventDefault();
@@ -414,10 +429,11 @@
 
   const typeName = state => state['element-type'] === 'gallery' ? 'Galerijplaat' : 'Balkonplaat';
   function legend(state, view) {
-    if (view === 'iso') return '<span>Slepen of pijltjestoetsen om te draaien · Home voor beginstand</span>';
+    if (view === 'iso') return '<span>Slepen of pijltjestoetsen om te draaien</span><span>Shift + slepen om te schuiven</span><span>Home herstelt de kijkrichting</span>';
     if (view === 'section') return '<span>A–A · X = ' + number(state.length / 2, 1) + ' mm</span><span>Y = 0 aan gevel · Z = 0 op doorgetrokken loopvlak aan gevel</span>' +
-      (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none' || hasChannel(state) || state.dripGroove ? '<span>Details afzonderlijk vergroot</span>' : '');
+      (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none' || hasChannel(state) || state.dripGroove || state.facadeRebate ? '<span>Details afzonderlijk vergroot</span>' : '');
     let items = '<span><i class="pc-key facade"></i>Gevelrand</span>';
+    if (state.facadeRebate) items += '<span><i class="pc-key rebate"></i>Gevelsponning bovenzijde</span>';
     if (referenceDisplay(state) || state.edgeProfile && state.edgeProfile !== 'none') items += '<span><i class="pc-key underside"></i>Profiel onderzijde</span>';
     if (hasChannel(state)) items += '<span><i class="pc-key channel"></i>Langsgoot bovenzijde</span>';
     if (state.dripGroove) items += '<span><i class="pc-key drip-groove"></i>Waterhol onderzijde</span>';
@@ -454,7 +470,9 @@
     }
     fields.push([reference ? 'Dikteverloop' : 'Basisdikte gevel / vrij', thicknessText], ['Randdetail', edgeText],
       ['Totale dikte gevel / vrij', model.endThicknessMm.map(n=>number(n)).join(' / ') + ' mm']);
+    if (state.facadeRebate) fields.push(['Gevelsponning (b × d)', number(state.rebateWidth) + ' × ' + number(state.rebateDepth) + ' mm']);
     const planKeys = [hasChannel(state) ? 'ingekleurde strook = langsgoot' : '',
+      state.facadeRebate ? 'grijze strook aan gevel = sponning' : '',
       state.dripGroove ? 'korte streeplijn = waterhol onderzijde' : '',
       state.drain ? 'cirkel met kruis = HWA-reservering' : '',
       state.railing ? 'cirkels op vrije rand = hekwerkreserveringen' : ''].filter(Boolean).join(' · ');
@@ -488,7 +506,6 @@
     const sectionDrawing = section(state, model, 'pc-section');
     for (const [key, svg] of [['plan', planSvg], ['section', sectionSvg], ['iso', isoSvg]]) {
       svg.classList.add('pc-drawing');
-      svg.setAttribute('viewBox', '0 0 760 440');
       svg.toggleAttribute('hidden', key !== view);
     }
     planSvg.innerHTML = planDrawing;
@@ -507,5 +524,5 @@
       planDrawing.replaceAll('pc-plan-finish', 'pc-paper-finish'), sectionDrawing.replaceAll('pc-section-hatch', 'pc-paper-hatch'), drainWarning);
   }
 
-  window.PrecastDrawings = Object.freeze({ render });
+  window.PrecastDrawings = Object.freeze({render, resetOrbit});
 })();

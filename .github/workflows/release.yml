@@ -53,7 +53,7 @@ jobs:
       - name: Build the NSIS installer
         run: npm run desktop:build
       - name: Install desktop test dependencies
-        run: python -m pip install playwright==1.65.2 pywin32==312 ifcopenshell==0.9.0.post1
+        run: python -m pip install playwright==1.65.2 pywin32==312 ifcopenshell==0.9.0.post1 pypdf==7.2.0
       - name: Prepare standard-user launch for the installed app
         shell: pwsh
         run: |
@@ -64,12 +64,13 @@ jobs:
             throw 'Unexpected gsudo package checksum.'
           }
           Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $env:RUNNER_TEMP 'gsudo')
-      - name: Fetch the published 0.4.1 and 0.5.0 installers for the upgrade tests
+      - name: Fetch the three published installers for the upgrade tests
         shell: pwsh
         run: |
           $checksums = @{
             '0.4.1' = '30dbaf2449f9f0bb3e269df283dad090485448d8a27e0fc1c51ab781c0122695'
             '0.5.0' = '2fc9983d93ca3a2abcca7bbcc5e5671cbb60c75cbff8f39cb5162b8e05246f5f'
+            '0.5.1' = 'd6e32ece747f273108ec343843b4addb04b7e6434556bb48be3dd639685b9789'
           }
           foreach ($version in $checksums.Keys) {
             $previous = Join-Path $env:RUNNER_TEMP "open-precast-$version-setup.exe"
@@ -78,7 +79,7 @@ jobs:
               throw "Unexpected checksum for the $version Windows installer."
             }
           }
-      - name: Upgrade saved balconies and recover unsaved edits after running both older versions
+      - name: Upgrade saved balconies and recover unsaved edits after running each older version
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.number }}
@@ -95,7 +96,7 @@ jobs:
           icacls $output.FullName /grant:r "*${userSid}:(OI)(CI)M"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the test account access to its output directory.' }
           $gsudo = (Get-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'gsudo/x64/gsudo.exe')).FullName
-          foreach ($version in @('0.4.1','0.5.0')) {
+          foreach ($version in @('0.4.1','0.5.0','0.5.1')) {
             $previous = Join-Path $env:RUNNER_TEMP "open-precast-$version-setup.exe"
             $evidence = Join-Path $output.FullName "from-$version"
             & $gsudo --direct --wait --integrity Medium $python $test $installer --upgrade-from $previous --output $evidence

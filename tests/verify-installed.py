@@ -1,7 +1,7 @@
 """Install a Windows NSIS build, draw a slab and measure the IFC from its native Save dialog.
 
 python tests/verify-installed.py path/to/setup.exe [--upgrade-from path/to/earlier-setup.exe] [--output evidence-directory]
-Requires Python 3.12, playwright, pywin32 and ifcopenshell, plus the WebView2 runtime.
+Requires Python 3.12, playwright, pywin32, pypdf and ifcopenshell, plus the WebView2 runtime.
 """
 import argparse
 import json
@@ -22,6 +22,7 @@ import ifcopenshell
 import ifcopenshell.geom
 from ifcopenshell.util import element, shape
 from playwright.sync_api import sync_playwright
+from pypdf import PdfReader
 import win32api
 import win32con
 import win32gui
@@ -194,7 +195,23 @@ def draw_and_save(page, pid, folder, phase):
         print(f"Windows Save dialog wrote {target.name}", flush=True)
 
 
-def check_feedback(page):
+def check_sheet_pdf(page, pid, folder, expected_volume):
+    mark = page.locator("#mark").input_value()
+    target = folder / (mark + ".pdf")
+    page.locator("#print-drawing").click()
+    save_dialog(pid, target)
+    page.get_by_text("Elementblad als PDF opgeslagen", exact=True).wait_for()
+    sheet, = PdfReader(target).pages
+    assert abs(float(sheet.mediabox.width) * 25.4 / 72 - 297) < 1
+    assert abs(float(sheet.mediabox.height) * 25.4 / 72 - 210) < 1
+    contents = sheet.extract_text()
+    printed_volume = f"{expected_volume:.4f}".rstrip("0").rstrip(".").replace(".", ",") + " m³"
+    for value in [mark, "Bovenaanzicht", "Doorsnede", printed_volume]:
+        assert value in contents, (value, contents)
+    print("Windows PDF verifies as one landscape A4 with this slab, both views and its volume", flush=True)
+
+
+def check_feedback(page, pid, folder):
     # Exercise the compiled WebView's real CSP and Fetch implementation. Only
     # local app resources may go to the network during this dialog test.
     endpoint = "https://open-feedback-studio.pages.dev/api/feedback"
@@ -239,8 +256,15 @@ def check_feedback(page):
         if not config.get("app"):
             page.locator("#open-feedback").click()
             assert page.locator("#feedback-registration").is_visible()
-            assert page.locator("#feedback-message").is_disabled()
             assert page.locator("#feedback-submit").is_disabled()
+            page.locator("#feedback-message").fill(note)
+            page.get_by_role("button", name="Concept opslaan").click()
+            target = folder / "feedbackconcept.txt"
+            save_dialog(pid, target)
+            page.get_by_text("Feedbackconcept opgeslagen.", exact=True).wait_for()
+            contents = target.read_text(encoding="utf-8")
+            assert note in contents and config["version"] in contents and MARK not in contents
+            assert not captured and not unexpected
             page.locator("#feedback-close").click()
         page.evaluate("version => { window.PrecastFeedbackConfig = Object.freeze({app:'opcs-desktop-test', version}); }",
                       config["version"])
@@ -257,6 +281,78 @@ def check_feedback(page):
     finally:
         page.evaluate("config => { window.PrecastFeedbackConfig = Object.freeze(config); }", config)
         page.context.unroute("**/*", intercept)
+
+
+def check_design_controls(page, pid, folder):
+    def button(name):
+        return page.locator("#" + name)
+
+    button("new-project").click()
+    button("cancel-element").click()
+    assert not button("new-element-dialog").is_visible() and button("mark").input_value() == "BP-01"
+    button("new-project").click()
+    page.get_by_role("radio", name="Balkon met gevelsponning", exact=False).check()
+    button("create-element").click()
+    mark = "BP-S01"
+    assert button("mark").input_value() == mark and button("facadeRebate").is_checked()
+    button("rebateDepth").fill("45")
+    button("undo-edit").click()
+    assert button("rebateDepth").input_value() == "30"
+    button("redo-edit").click()
+    assert button("rebateDepth").input_value() == "45"
+    button("undo-edit").click()
+    assert button("volume-value").inner_text() == "0,900 m³"
+
+    for view in ["plan", "section", "iso"]:
+        page.locator(f'[data-view="{view}"]').click()
+        svg = button(view + "-view")
+        original = svg.get_attribute("viewBox")
+        button("zoom-in").click()
+        assert svg.get_attribute("viewBox") != original
+        button("zoom-out").click()
+        assert button("view-scale").inner_text() == "100%"
+        button("zoom-in").click()
+        button("fit-view").click()
+        assert svg.get_attribute("viewBox") == original
+    page.locator(".bim-info + details summary").click()
+    assert page.locator(".bim-info + details p").is_visible()
+    check_sheet_pdf(page, pid, folder, .90048)
+
+    project = folder / (mark + ".opc.json")
+    button("save-project").click()
+    save_dialog(pid, project)
+    page.get_by_text("Ontwerp opgeslagen", exact=True).wait_for()
+    page.locator("#drafts summary").click()
+    drafts = button("draft-list")
+    old = drafts.locator("option").filter(has_text="BP-01").first
+    drafts.select_option(value=old.get_attribute("value"))
+    button("export-draft").click()
+    backup = folder / "werkversie.opc.json"
+    save_dialog(pid, backup)
+    page.get_by_text("Kopie van werkversie opgeslagen", exact=True).wait_for()
+    assert json.loads(backup.read_text(encoding="utf-8"))["element"]["mark"] == "BP-01"
+    button("restore-draft").click()
+    assert button("mark").input_value() == "BP-01"
+    with page.expect_file_chooser() as chooser:
+        button("open-project").click()
+    chooser.value.set_files(project)
+    page.get_by_text("Geopend · " + project.name, exact=True).wait_for()
+    assert button("mark").input_value() == mark and button("rebateDepth").input_value() == "30"
+
+    target = folder / (mark + ".ifc")
+    button("export-ifc").click()
+    save_dialog(pid, target)
+    page.get_by_text("IFC-bestand opgeslagen", exact=True).wait_for()
+    model = ifcopenshell.open(str(target))
+    slab, = model.by_type("IfcSlab")
+    identity = json.loads(project.read_text(encoding="utf-8"))["identity"]
+    assert model.schema == "IFC4" and slab.Tag == mark
+    assert slab.GlobalId == ifcopenshell.guid.compress(identity.replace("-", ""))
+    geometry = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), slab)
+    volume = shape.get_volume(geometry.geometry)
+    assert math.isclose(volume, .90048, abs_tol=1e-9), volume
+    assert math.isclose(element.get_pset(slab, "Qto_SlabBaseQuantities")["NetVolume"], volume, abs_tol=1e-9)
+    print(f"Windows template {mark}: reopened design, measured IFC solid and quantity {volume:.6f} m3", flush=True)
 
 
 def exercise_older_version(page):
@@ -312,14 +408,17 @@ def exercise(executable, folder, profile, phase):
                                   wait_until="commit", timeout=30000)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            if phase == "rollback":
+            if phase == "controls":
+                check_design_controls(page, process.pid, folder)
+            elif phase == "rollback":
                 exercise_older_version(page)
             elif phase == "restored":
                 export_restored_revision(page, process.pid, folder)
             else:
                 draw_and_save(page, process.pid, folder, phase)
                 if phase != "baseline":
-                    check_feedback(page)
+                    check_sheet_pdf(page, process.pid, folder, .64407)
+                    check_feedback(page, process.pid, folder)
                 if phase == "upgraded":
                     # These edits exist only in the current app's working copy.
                     page.locator("#mark").fill("BP-LOKAAL")
@@ -439,14 +538,18 @@ def main():
             executable, _ = install(installer, destination, version)
             exercise(executable, folder, profile, "upgraded" if original_id else "fresh")
             measure(folder, True, original_id)
+            controls = folder / "knopproef"
+            controls.mkdir()
+            exercise(executable, controls, folder / "controls-profile", "controls")
             if args.upgrade_from:
                 exercise(previous_executable, folder, profile, "rollback")
                 exercise(executable, folder, profile, "restored")
                 verify_restored_export(folder, original_id)
             if args.output:
                 args.output.mkdir(exist_ok=True, parents=True)
-                for extension in (".ifc", ".opc.json", ".png"):
+                for extension in (".ifc", ".opc.json", ".png", ".pdf"):
                     shutil.copy2(folder / (MARK + extension), args.output)
+                shutil.copytree(controls, args.output / controls.name, dirs_exist_ok=True)
                 if args.upgrade_from:
                     shutil.copytree(baseline, args.output / "before-upgrade", dirs_exist_ok=True)
                     shutil.copy2(folder / "BP-LOKAAL.ifc", args.output)

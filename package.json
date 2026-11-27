@@ -1,10 +1,10 @@
 {
   "name": "open-precast-concrete-studio",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/model.test.cjs tests/project.test.cjs tests/feedback.test.cjs",
-    "test:browser": "node tests/browser.cjs && node tests/drawings.cjs && node tests/occlusion.cjs && node tests/feedback-browser.cjs",
+    "test:browser": "node tests/browser.cjs && node tests/templates.cjs && node tests/history.cjs && node tests/viewport.cjs && node tests/drawings.cjs && node tests/occlusion.cjs && node tests/feedback-browser.cjs",
     "test:ifc": "uv run --no-project --python 3.12 --with ifcopenshell==0.9.0.post1 --with pytest tests/verify-ifc.py",
     "verify": "npm test && npm run test:browser && npm run test:ifc",
     "desktop:build": "tauri build --bundles nsis"

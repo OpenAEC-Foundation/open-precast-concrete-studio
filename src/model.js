@@ -16,7 +16,7 @@
     'element-type': 'elementtype', shape: 'plaatcontour', support: 'oplegging',
     finish: 'afwerking', drain: 'HWA', railing: 'hekwerk', upstand: 'opstand',
     thicknessMode: 'dikteverloop', edgeProfile: 'randprofiel', edgeSide: 'profielzijde',
-    channelProfile: 'langsgoot', dripGroove: 'waterhol'
+    channelProfile: 'langsgoot', dripGroove: 'waterhol', facadeRebate: 'gevelsponning'
   };
 
   function checkRange(value, label, min, max) {
@@ -31,13 +31,13 @@
     }
     const state = {density: 2450, upstandHeight: 100, upstandWidth: 80,
       thicknessMode:'constant', freeThickness:180, edgeProfile:'none',
-      edgeSide:'free', edgeWidth:120, edgeDrop:35,
+      edgeSide:'free', edgeWidth:120, edgeDrop:35, facadeRebate:false, rebateWidth:120, rebateDepth:30,
       channelProfile:'none', channelWidth:100, channelDepth:15, channelInset:50,
       dripGroove:false, dripWidth:15, dripDepth:8, dripInset:25, drainPosition:66, ...input};
     for (const [key, values] of Object.entries(choices)) {
       if (!values.includes(state[key])) throw new Error('Onbekende waarde voor ' + names[key] + '.');
     }
-    for (const key of ['drain', 'railing', 'upstand', 'dripGroove']) {
+    for (const key of ['drain', 'railing', 'upstand', 'dripGroove', 'facadeRebate']) {
       if (typeof state[key] !== 'boolean') throw new Error('Ongeldige keuze voor ' + names[key] + '.');
     }
     checkRange(state.length, 'Lengte (mm)', 400, 12000);
@@ -53,12 +53,20 @@
     checkRange(state.dripWidth, 'Waterholbreedte (mm)', 1, 4000);
     checkRange(state.dripDepth, 'Waterholdiepte (mm)', 1, 800);
     checkRange(state.dripInset, 'Afstand waterhol tot vrije rand (mm)', 0, 4000);
+    checkRange(state.rebateWidth, 'Sponningbreedte (mm)', 1, 5000);
+    checkRange(state.rebateDepth, 'Sponningdiepte (mm)', 1, 800);
+    if (state.facadeRebate && state.rebateWidth >= state.depth - geometryTolerance) {
+      throw new Error('De sponningbreedte moet kleiner zijn dan de plaatdiepte.');
+    }
+    if (state.facadeRebate && state.upstand) {
+      throw new Error('De gevelopstand en gevelsponning bezetten dezelfde rand. Kies één van beide.');
+    }
     if (state.edgeProfile !== 'none' && state.edgeWidth >= state.depth) {
       throw new Error('De profielbreedte moet kleiner zijn dan de plaatdiepte.');
     }
     if (state.thicknessMode === 'reference' &&
         (state.depth !== 2210 || state.slope !== 1 || state.upstand || state.edgeProfile !== 'none' ||
-         state.channelProfile !== 'none' || state.dripGroove)) {
+         state.channelProfile !== 'none' || state.dripGroove || state.facadeRebate)) {
       throw new Error('Het gemeten referentieprofiel heeft vaste randdetails, 2210 mm diepte en 1% afschot.');
     }
     checkRange(state.slope, 'Afschot (%)', 0, 5);
@@ -140,6 +148,7 @@
     }
     for (const [,y] of outline) addStation(y);
     const upstandEnd = state.upstand ? addStation(state.upstandWidth) : 0;
+    const rebateEnd = state.facadeRebate ? addStation(state.rebateWidth) : 0;
     const edgeEnd = edgeProfile === 'none' ? 0 : addStation(edgeSide === 'facade' ? edgeWidth : depth-edgeWidth);
     function groove(width, inset, label) {
       const outer = depth-inset, inner = outer-width;
@@ -149,6 +158,12 @@
     const channel = state.channelProfile !== 'none' && groove(state.channelWidth,state.channelInset,'De langsgoot');
     const drip = state.dripGroove && groove(state.dripWidth,state.dripInset,'Het waterhol');
     if (channel && channel.inner < upstandEnd) throw new Error('De langsgoot overlapt de gevelopstand.');
+    if (channel && channel.inner < rebateEnd) throw new Error('De langsgoot overlapt de gevelsponning.');
+    // An adjacent rectangular channel and rebate can share one floor. Resolve
+    // heights within the IFC context precision to avoid a zero-height face.
+    const sharedFloor = channel && state.channelProfile === 'rect' && state.facadeRebate &&
+      channel.inner === rebateEnd && Math.abs(state.channelDepth-state.rebateDepth) <= geometryTolerance;
+    const channelDepth = sharedFloor ? state.rebateDepth : state.channelDepth;
     function vFraction(feature, y) {
       return y <= feature.centre ? (y-feature.inner)/(feature.centre-feature.inner) :
         (feature.outer-y)/(feature.outer-feature.centre);
@@ -160,6 +175,7 @@
       const y0 = stations[i-1], y1 = stations[i];
       const midpoint = (y0+y1)/2;
       const raised = midpoint < upstandEnd;
+      const recessed = midpoint < rebateEnd;
       const edge = edgeProfile !== 'none' && (edgeSide === 'facade' ? midpoint < edgeEnd : midpoint > edgeEnd);
       const inChannel = channel && midpoint > channel.inner && midpoint < channel.outer;
       const inDrip = drip && midpoint > drip.inner && midpoint < drip.outer;
@@ -169,7 +185,7 @@
         const [left,right] = limitsAt(state,y);
         if (measured) {
           return {y, left, right, top:interpolate(referenceTop,y), bottom:interpolate(referenceBottom,y),
-            edgeDrop:0, upstand:0, channelCut:0, dripCut:0};
+            edgeDrop:0, upstand:0, channelCut:0, dripCut:0, rebateCut:0};
         }
         const base = thicknessMode === 'linear' ? thickness+(freeThickness-thickness)*y/depth : thickness;
         const walk = -slope*y/100;
@@ -180,20 +196,21 @@
           if (edgeProfile === 'bevel' && y === edgeEnd) edgeDrop = 0;
         }
         const upstand = raised ? state.upstandHeight : 0;
-        const channelCut = inChannel ? state.channelDepth*(state.channelProfile === 'rect' ? 1 : vFraction(channel,y)) : 0;
+        const rebateCut = recessed ? state.rebateDepth : 0;
+        const channelCut = inChannel ? channelDepth*(state.channelProfile === 'rect' ? 1 : vFraction(channel,y)) : 0;
         const dripCut = inDrip ? state.dripDepth*vFraction(drip,y) : 0;
-        return {y, left, right, top:walk+upstand-channelCut, bottom:walk-base-edgeDrop+dripCut,
-          edgeDrop, upstand, channelCut, dripCut};
+        return {y, left, right, top:walk+upstand-channelCut-rebateCut, bottom:walk-base-edgeDrop+dripCut,
+          edgeDrop, upstand, channelCut, dripCut, rebateCut};
       }
       const a = sectionAt(y0), b = sectionAt(y1), previous = bands.at(-1)?.b ?? a;
       // Both adjacent vertical intervals must overlap at a step. Positive
       // thickness on each side alone can still give two disconnected solids.
       if (Math.min(a.top,previous.top)-Math.max(a.bottom,previous.bottom) <= geometryTolerance ||
           b.top-b.bottom <= geometryTolerance) {
-        throw new Error('Bij de goot of het waterhol blijft geen doorlopende betondoorsnede over.');
+        throw new Error('Bij de randdetails blijft geen doorlopende betondoorsnede over.');
       }
       if (channel && y0 === channel.centre) channelCentreRow = a;
-      bands.push({a, b, edge, raised, inChannel, inDrip});
+      bands.push({a, b, edge, raised, recessed, inChannel, inDrip});
     }
     return {bands, channelCentreRow};
   }
@@ -303,6 +320,7 @@
     const measured = thicknessMode === 'reference';
     return {
       state, outline, upstandOutline:footprint(bands.filter(b => b.raised)),
+      rebateOutline:footprint(bands.filter(b => b.recessed)),
       edgeOutline:footprint(bands.filter(b => b.edge)), edgeAtFacade:[near.left,near.right],
       channelOutline:footprint(channelBands), dripOutline:footprint(bands.filter(b => b.inDrip)),
       sectionRing:sectionPolygon(bands),
@@ -312,6 +330,7 @@
       parts:[{id:'slab', faces:meshOf(bands)}], reservations, lowLipWarningMm,
       areaM2:planArea(outline)/1e6,
       upstandVolumeM3:integratedVolume(bands,r => r.upstand),
+      rebateVolumeM3:integratedVolume(bands,r => r.rebateCut),
       edgeVolumeM3:integratedVolume(bands,r => r.edgeDrop),
       channelVolumeM3:integratedVolume(bands,r => r.channelCut), dripVolumeM3:integratedVolume(bands,r => r.dripCut),
       volumeM3, massKg:volumeM3*state.density, dropMm:slope*depth/100

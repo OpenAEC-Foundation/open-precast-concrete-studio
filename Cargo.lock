@@ -2296,13 +2296,15 @@ dependencies = [
 
 [[package]]
 name = "open-precast-concrete-studio"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "open",
  "rfd",
  "tauri",
  "tauri-build",
  "tempfile",
+ "webview2-com",
+ "windows-core",
 ]
 
 [[package]]

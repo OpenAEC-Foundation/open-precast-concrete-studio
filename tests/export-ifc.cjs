@@ -41,6 +41,13 @@ const cases = {
   cornerChannel:{...initial, 'element-type':'gallery', supplier:'omg', shape:'chamfer', cut:320, upstand:true,
     channelProfile:'rect', channelInset:0, channelWidth:320, channelDepth:23,
     dripGroove:true, dripInset:50, dripWidth:20, dripDepth:8, drainPosition:100, mark:'GP-G'},
+  rebate:{...initial, length:3200, depth:1800, thicknessMode:'linear', freeThickness:120,
+    edgeProfile:'bevel', edgeSide:'facade', edgeWidth:500, edgeDrop:60,
+    facadeRebate:true, rebateWidth:120, rebateDepth:30, mark:'BP-S01'},
+  rebateGallery:{...initial, 'element-type':'gallery', shape:'trapezoid', cut:450,
+    facadeRebate:true, rebateWidth:400, rebateDepth:40, channelProfile:'rect',
+    channelInset:1100, channelWidth:100, channelDepth:25,
+    dripGroove:true, dripInset:1250, dripWidth:16, dripDepth:12, mark:'GP-S02'},
   reference:{...initial, thicknessMode:'reference', thickness:109.2, freeThickness:65,
     length:2200, depth:2210, slope:1, edgeProfile:'none', upstand:false, mark:'BP-R'}
 };

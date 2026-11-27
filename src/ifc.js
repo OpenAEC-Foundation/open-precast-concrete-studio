@@ -146,7 +146,7 @@
       bool('Hekwerkreservering', railingCount > 0),
       property('Aantal HWA-reserveringen', 'IFCINTEGER', drainCount),
       property('Aantal hekwerkreserveringen', 'IFCINTEGER', railingCount),
-      bool('Gevelopstand', state.upstand)
+      bool('Gevelopstand', state.upstand), bool('Gevelsponning bovenzijde', !!state.facadeRebate)
     ];
     const mode = state.thicknessMode ?? 'constant';
     const profile = state.edgeProfile ?? 'none';
@@ -155,6 +155,10 @@
     properties.push(label('Langsgoot bovenzijde', channelNames[channel]));
     properties.push(label('Waterhol onderzijde', mode === 'reference' ? 'Volgens Hi-Con-referentiedoorsnede' : (state.dripGroove ? 'V-waterhol' : 'Geen')));
     const cutVolume = (name, value) => property(name, 'IFCVOLUMEMEASURE', real(value));
+    if (state.facadeRebate) {
+      properties.push(length('Breedte gevelsponning', state.rebateWidth), length('Diepte gevelsponning', state.rebateDepth),
+        cutVolume('Uitsparingsvolume gevelsponning', model.rebateVolumeM3));
+    }
     if (channel !== 'none') {
       properties.push(length('Breedte langsgoot', state.channelWidth), length('Diepte langsgoot', state.channelDepth),
         length('Vrije rand tot buitenste gootlip', state.channelInset),
@@ -170,7 +174,7 @@
     properties.push(label('Dikteverloop', modeNames[mode]));
     if (mode === 'constant') {
       const baseName = profile === 'none' ? 'Verticale plaatdikte' : 'Basisplaatdikte buiten randprofiel';
-      properties.push(length(channel !== 'none' || state.dripGroove ? 'Basisplaatdikte buiten randdetails' : baseName, state.thickness));
+      properties.push(length(channel !== 'none' || state.dripGroove || state.facadeRebate ? 'Basisplaatdikte buiten randdetails' : baseName, state.thickness));
     }
     if (mode === 'linear') {
       properties.push(length('Basisdikte gevelzijde', state.thickness), length('Basisdikte vrije rand', state.freeThickness));

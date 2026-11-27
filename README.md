@@ -2,11 +2,13 @@
 
 Met Open Precast Concrete Studio teken je prefab balkon- en galerijplaten, maak je een elementblad en exporteer je het betonlichaam naar IFC4.
 
+![Doorsnede van BP-S01 met de instelbare gevelsponning, bemate randdetails en hoeveelheden](docs/gevelsponning.png)
+
 ## Installeren op Windows
 
 Download het bestand met de uitgang `windows-x64-setup.exe` en voer het uit. De installer installeert de app voor je eigen Windows-account. Open daarna **Open Precast Concrete Studio** vanuit Start. Tekenen en exporteren werken lokaal. [Download de nieuwste release](https://github.com/OpenAEC-Foundation/open-precast-concrete-studio/releases/latest)
 
-**Opslaan** opent een Windows-dialoog voor het bewerkbare `.opc.json`-ontwerp. Met **Exporteer IFC4** kies je waar het `.ifc`-bestand komt. **Open ontwerp** opent een eerder opgeslagen plaat.
+**Opslaan** opent een Windows-dialoog voor het bewerkbare `.opc.json`-ontwerp. Met **Exporteer IFC4** kies je waar het `.ifc`-bestand komt. **Elementblad** bewaart de tekening als liggende A4-PDF. **Open ontwerp** opent een eerder opgeslagen plaat.
 
 De installer gebruikt Microsoft Edge WebView2. Als deze runtime op de computer ontbreekt, downloadt de installer deze bij de eerste installatie.
 
@@ -14,13 +16,19 @@ De ZIP op dezelfde releasepagina bevat de webversie en voorbeelden. Pak de ZIP u
 
 ## Een plaat tekenen
 
-Kies balkonplaat of galerijplaat en vul het elementmerk en de bouwlaag in. Lengte loopt evenwijdig aan de gevel, diepte vanaf de gevel naar de vrije rand. Het doorgetrokken loopvlak ligt aan de gevel op lokaal peil nul.
+Met **Nieuw** kies je uit vier startmodellen. De rechte balkonplaat, de galerij met afwatering, het balkon met gevelsponning en het gemeten Hi-Con-profiel hebben elk een voorbeeld van hun doorsnede. Geef het nieuwe element een merk en een bouwlaag. Lengte loopt evenwijdig aan de gevel, diepte vanaf de gevel naar de vrije rand. Het doorgetrokken loopvlak ligt aan de gevel op lokaal peil nul.
 
 Bij **Lineair dikteverloop** stel je de verticale plaatdikte in aan de gevel en aan de vrije rand. Het afschot bepaalt de bovenzijde. De dikten bepalen de onderzijde. Een rechthoekige of schuine verdikking kan aan de gevel of aan de vrije rand liggen. De opstand en randverdikking tellen beide mee in het volume binnen de gekozen plattegrond.
 
 Bij **Hi-Con · gemeten doorsnede** volgt de editor een vaste snede van 2.210 mm diep door het betonlichaam van het onderzochte balkon. De gevelneus en het waterhol bepalen mede de plaatselijke dikte. Het loopvlak heeft 1% afschot. Bij een rechthoekige lengte van 2.200 mm levert de over die lengte doorgetrokken snede 0,425991962 m³ beton op. Het fabrikantmodel bevat daarnaast plaatselijke geometrie en afzonderlijke onderdelen. [Meting en bron](docs/bim-referentie.md)
 
-De drie tekenweergaven gebruiken hetzelfde elementmodel. Sleep of gebruik de pijltjestoetsen om het model te draaien. **Elementblad** opent de afdrukweergave met bovenaanzicht, doorsnede, maatvoering, reserveringen en hoeveelheden. Kies in het afdrukvenster voor PDF om een bestand te bewaren. De maatlabels geven millimeters aan.
+De drie tekenweergaven gebruiken hetzelfde elementmodel. Zoom met het muiswiel rond de aanwijzer of met **+** en **−**. In 3D draai je de plaat door te slepen en verschuif je haar met Shift en slepen. In bovenaanzicht en doorsnede kun je direct slepen. **Passend in beeld** brengt de hele tekening terug. Het elementblad bevat het bovenaanzicht, de doorsnede, maatvoering in millimeters, reserveringen en hoeveelheden. In de webeditor opent **Elementblad** het afdrukvenster.
+
+Met **Ongedaan maken** en **Opnieuw** kun je veldwijzigingen in de huidige plaat terugdraaien en herstellen. Begin je een ander element, dan start voor dat element een nieuwe bewerkingsgeschiedenis. Eerdere platen zijn terug te vinden bij **Werkversies**.
+
+### Gevelsponning tekenen
+
+Schakel **Gevelsponning bovenzijde** in en geef de breedte vanaf de gevel en de verticale diepte op. De uitsparing volgt het loopvlak over de hele plaatlengte. Bij BP-S01 neemt de sponning van 120 × 30 mm precies 11,52 liter beton weg. Met de schuine verdikking onder de gevelzijde komt het netto betonvolume op 0,90048 m³. [Bewerkbaar voorbeeld](examples/BP-S01.opc.json) · [Elementblad](examples/BP-S01.pdf) · [IFC4](examples/BP-S01.ifc) · [Vergelijking van de twaalf referentiebeelden](docs/ontwerpreferenties.md)
 
 ### Afwatering tekenen
 
@@ -43,13 +51,13 @@ Voorbeeld GP-A01 is een galerijplaat van 3.600 × 1.800 mm met een langsgoot van
 
 **Exporteer IFC4** schrijft één gesloten betonlichaam als `IfcSlab/FLOOR`, in een bouwlaag met de ingevoerde naam. Het bestand bevat materiaal, lokale plaatsing, projectieoppervlak, betonvolume en indicatieve massa. Het peil is lokaal. Na heropenen van het ontwerp of een maatrevisie houdt het element dezelfde IFC-identiteit.
 
-**Werkversies** bij **Element ontwerpen** geeft toegang tot eerdere lokale ontwerpen. Als je een andere plaat opent of met **Nieuw** begint, kun je hier terug naar de vorige tekening. Versie 0.5.1 neemt het bestaande lokale concept uit 0.4.1 of 0.5.0 over en bewaart de nieuwe werkversies apart. Ze zijn gekoppeld aan het lokale app- of browserprofiel.
+**Werkversies** bij **Element ontwerpen** geeft toegang tot eerdere lokale ontwerpen. Als je een andere plaat opent of met **Nieuw** begint, kun je hier terug naar de vorige tekening. Versie 0.6.0 leest werkversies uit 0.4.1, 0.5.0 en 0.5.1. Door een eigen opslagplek voor nieuwe bewerkingen blijven ze ook na tussentijds gebruik van een oudere versie beschikbaar. Ze zijn gekoppeld aan het lokale app- of browserprofiel.
 
-**Opslaan** bewaart het ontwerp als zelfstandig, bewerkbaar `.opc.json`-bestand in ontwerpformaat 0.4. Bestanden uit de Windows-app 0.4.1 (ontwerpformaat 0.3) behouden de bestaande doorsnede en IFC-identiteit. Dat geldt ook voor ontwerpen met constante dikte uit formaat 0.2. Concepten uit 0.1 krijgen bij migratie een identiteit.
+**Opslaan** bewaart het ontwerp als zelfstandig, bewerkbaar `.opc.json`-bestand in ontwerpformaat 0.5. Bestanden uit ontwerpformaat 0.2, 0.3 en 0.4 behouden hun doorsnede en IFC-identiteit. Concepten uit 0.1 krijgen bij migratie een identiteit.
 
 ## Feedback in de app
 
-**Feedback** in de titelbalk opent een Nederlands formulier voor fouten, ideeën en vragen. Open Feedback Studio verzorgt de koppeling met de openbare GitHub-repository. Het formulier vermeldt vooraf welke velden meegaan en bewaart de invoer bij een fout. Verzending wordt alleen ingeschakeld met een bevestigd app-id in de centrale dienst. De Windows- en webversie staan voor feedback dezelfde HTTPS-bestemming toe. [Open Feedback Studio](https://open-feedback-studio.pages.dev)
+**Feedback** in de titelbalk opent een Nederlands formulier voor fouten, ideeën en vragen. Zolang registratie bij Open Feedback Studio in behandeling is, kun je de melding via **Concept opslaan** lokaal bewaren als tekstbestand. Na activering van het app-id kan dezelfde dialoog de melding naar de centrale dienst verzenden. [Open Feedback Studio](https://open-feedback-studio.pages.dev)
 
 ## Basis uit Open Stair Studio
 

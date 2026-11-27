@@ -78,13 +78,16 @@ async function main() {
     page.on('dialog', dialog => dialog.accept());
     await page.goto(pathToFileURL(path.resolve(__dirname, '../index.html')).href);
     const svg = page.locator('#iso-view');
-    const gallery = require('../examples/GP-A01.opc.json').element;
+    const gallery = project.decode(JSON.stringify(require('../examples/GP-A01.opc.json'))).state;
     const scenarios = [
       {...project.defaults, edgeProfile:'step', edgeSide:'free', edgeWidth:200, edgeDrop:100,
         channelProfile:'rect', channelWidth:100, channelDepth:45, channelInset:20},
       {...gallery, shape:'chamfer',length:3500,depth:2400,cut:1000,
         channelWidth:200,channelDepth:50,channelInset:80},
       {...gallery, shape:'trapezoid',channelProfile:'v',upstand:true,edgeProfile:'bevel',edgeSide:'facade'},
+      {...project.defaults,depth:1800,thicknessMode:'linear',freeThickness:120,
+        edgeProfile:'bevel',edgeSide:'facade',edgeWidth:500,edgeDrop:60,
+        facadeRebate:true,rebateWidth:120,rebateDepth:30},
       project.decode(JSON.stringify(require('../examples/BP-P01.opc.json'))).state
     ];
     let overlaps = 0;
@@ -102,7 +105,7 @@ async function main() {
       }
     }
     assert.ok(overlaps > 100, 'The rays must exercise overlapping surfaces');
-    console.log('Edge: 16 views of four slab models checked by sight ray, including '+overlaps+' overlapping face samples and reservation visibility.');
+    console.log('Edge: 20 views of five slab models checked by sight ray, including '+overlaps+' overlapping face samples and reservation visibility.');
   } finally { await browser.close(); }
 }
 

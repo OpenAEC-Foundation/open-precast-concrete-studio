@@ -15,6 +15,33 @@ async function download(page, button, name) {
   return fs.readFile(name,'utf8');
 }
 
+async function checkSupplierLinks(page) {
+  const supplier = page.locator('#supplier');
+  const link = page.locator('#profile-source');
+  const nativeCalls = [];
+  await page.exposeFunction('testSupplierLink', (command, args) => {
+    nativeCalls.push([command, args.url]);
+    if (nativeCalls.length === 3) throw new Error('Geen systeembrowser beschikbaar');
+  });
+  const destinations = {
+    olbecon:'https://www.olbecon.nl/prefab/balkons-en-galerijplaten',
+    omg:'https://www.omgprefabbeton.be/',
+    vebo:'https://www.vebo.nl/balkonconcept'
+  };
+  for (const [key,url] of Object.entries(destinations)) {
+    await supplier.selectOption(key);
+    assert.equal(await link.getAttribute('href'),url);
+    assert.equal(await link.getAttribute('target'),'_blank');
+    await page.evaluate(() => { window.__TAURI__ = {core:{invoke:window.testSupplierLink}}; });
+    await link.click();
+  }
+  await page.getByText('Openen van de productspecificatie is mislukt.', {exact:false}).waitFor();
+  assert.deepEqual(nativeCalls, Object.values(destinations).map(url => ['open_supplier_source',url]));
+  await page.evaluate(() => { delete window.__TAURI__; });
+  await supplier.selectOption('generic');
+  assert.ok(await link.isHidden());
+}
+
 async function main() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(),'opcs-browser-'));
   const browser = await chromium.launch({channel:process.env.OPCS_BROWSER || 'msedge'});
@@ -26,6 +53,7 @@ async function main() {
     const control = id => page.locator('#' + id);
     const url = pathToFileURL(path.resolve(__dirname,'../index.html')).href;
     await page.goto(url);
+    await checkSupplierLinks(page);
     assert.equal(await control('mass-value').innerText(), '2.258 kg');
     assert.ok(await page.locator('#iso-view polygon').count() >= 3);
     for (const view of ['plan','section','iso']) {
@@ -91,8 +119,8 @@ async function main() {
     await page.pdf({path:pdfFile, preferCSSPageSize:true, printBackground:true});
     await page.emulateMedia({media:'screen'});
 
-    page.once('dialog', dialog => dialog.accept());
     await control('new-project').click();
+    await control('create-element').click();
     const nextIfc = await download(page,'export-ifc',path.join(dir,'new.ifc'));
     assert.notEqual(guid(ifc),guid(nextIfc));
     await control('file-input').setInputFiles(jsonFile);
@@ -105,8 +133,8 @@ async function main() {
     assert.equal(await control('mark').inputValue(),'GP-Z01');
     assert.equal(await control('length').inputValue(),'4520');
     // One independent hand calculation with a linear soffit and a stepped band.
-    page.once('dialog', dialog => dialog.accept());
     await control('new-project').click();
+    await control('create-element').click();
     await control('element-type').selectOption('balcony');
     await control('mark').fill('BP-P01');
     await control('shape').selectOption('rectangle');

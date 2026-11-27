@@ -54,6 +54,8 @@ def section_dimensions(state, y):
     top = walking_surface
     if state["upstand"] and y < state["upstandWidth"]:
         top += state["upstandHeight"]
+    if state.get("facadeRebate") and y < state["rebateWidth"]:
+        top -= state["rebateDepth"]
     if state.get("edgeProfile", "none") != "none":
         dist = y if state["edgeSide"] == "facade" else depth-y
         if dist < state["edgeWidth"]:
@@ -79,6 +81,8 @@ def station_intervals(state):
     stations = {0, depth}
     if state["upstand"]:
         stations.add(state["upstandWidth"])
+    if state.get("facadeRebate"):
+        stations.add(state["rebateWidth"])
     if state["shape"] == "chamfer":
         stations.add(depth-state["cut"])
     if state.get("edgeProfile", "none") != "none":
@@ -231,7 +235,14 @@ def check_export(path):
     mode = state.get("thicknessMode", "constant")
     assert design["Dikteverloop"] == {"constant":"Constant", "linear":"Lineair", "reference":"Hi-Con referentiedoorsnede"}[mode]
     channel = state.get("channelProfile","none")
-    assert ("Verticale plaatdikte" in design) == (mode == "constant" and state.get("edgeProfile","none") == "none" and channel == "none" and not state.get("dripGroove"))
+    uniform = mode == "constant" and state.get("edgeProfile","none") == "none"
+    assert ("Verticale plaatdikte" in design) == (uniform and channel == "none" and not state.get("dripGroove") and not state.get("facadeRebate"))
+    assert design["Gevelsponning bovenzijde"] == bool(state.get("facadeRebate"))
+    if state.get("facadeRebate"):
+        assert math.isclose(design["Breedte gevelsponning"], state["rebateWidth"]/1000)
+        assert math.isclose(design["Diepte gevelsponning"], state["rebateDepth"]/1000)
+        removed = expected_volume({**state, "facadeRebate":False}, intervals) - volume
+        assert math.isclose(design["Uitsparingsvolume gevelsponning"], removed, abs_tol=1e-11)
     assert design["Langsgoot bovenzijde"] == {"none":"Geen","v":"V-goot","rect":"Rechthoekige langsgoot"}[channel]
     if channel != "none" or state.get("dripGroove"):
         for key, prefix, enabled in [("langsgoot","channel",channel != "none"),("waterhol","drip",state.get("dripGroove"))]:
@@ -301,7 +312,7 @@ if __name__ == "__main__":
         original = check_export(base / "base.ifc")
         revision = check_export(base / "revision.ifc")
         other = check_export(base / "gallery.ifc")
-        for name in ("wedge","step","diagonal","coincident","decimal","reference","gutter","vchannel","cornerChannel"):
+        for name in ("wedge","step","diagonal","coincident","decimal","reference","gutter","vchannel","cornerChannel","rebate","rebateGallery"):
             check_export(base / (name + ".ifc"))
         if options.source_reference:
             compare_source(options.source_reference, base / "reference.ifc")

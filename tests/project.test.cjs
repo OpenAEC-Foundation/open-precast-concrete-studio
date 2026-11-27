@@ -67,8 +67,18 @@ test('the 0.4.1 Windows example retains its measured waterhol and identity on up
   assert.equal(restored.state.drainPosition,66);
   assert.ok(Math.abs(project.validate(restored.state).volumeM3 - 0.42599196163) < 1e-10);
   const encoded = project.encode(restored.state,restored.identity,restored.name);
-  assert.equal(JSON.parse(encoded).schema,'open-precast-concrete-studio/0.4');
+  assert.equal(JSON.parse(encoded).schema,'open-precast-concrete-studio/0.5');
   assert.deepEqual(project.decode(encoded),restored);
+});
+
+test('0.4 retains its drainage geometry and a 0.5 rebate round-trips without changing the IFC identity', () => {
+  const old = structuredClone(require('../examples/GP-A01.opc.json'));
+  assert.equal(old.schema,'open-precast-concrete-studio/0.4');
+  const {state, identity, name} = project.decode(JSON.stringify(old));
+  assert.equal(state.facadeRebate,false);
+  assert.deepEqual({...old.element,facadeRebate:false,rebateWidth:120,rebateDepth:30},state);
+  const revised = {...state,upstand:false,facadeRebate:true,rebateWidth:95,rebateDepth:17};
+  assert.deepEqual(project.decode(project.encode(revised,identity,name)),{state:revised,identity,name});
 });
 
 test('existing concept 0.1 stays editable and gains a stable ID on first save', () => {

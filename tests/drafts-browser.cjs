@@ -42,14 +42,47 @@ module.exports = async function checkDrafts(browser, url, directory) {
     await page.reload();
     assert.equal(await field('depth').inputValue(),'');
     assert.ok(await field('export-ifc').isDisabled());
-    page.once('dialog',dialog=>dialog.accept());
     await field('new-project').click();
+    await field('create-element').click();
     await choose('BP-ONGESLAGEN',4980);
     const filename = path.join(directory,'onvolledige-kopie.opc.json');
     assert.equal(JSON.parse(await copy(filename)).unfinished.depth,'');
     await importFile(filename);
     assert.equal(await field('depth').inputValue(),'');
     assert.equal(await field('length').inputValue(),'4980');
+    // The previous version also kept raw invalid field text and the manual
+    // profile behind the measured Hi-Con preset. Both survive the schema bump.
+    const legacyRaw = JSON.parse(await fs.readFile(filename,'utf8'));
+    legacyRaw.schema = 'open-precast-concrete-studio/0.4';
+    for (const key of ['facadeRebate','rebateWidth','rebateDepth']) {
+      delete legacyRaw.element[key];
+      delete legacyRaw.unfinished[key];
+    }
+    legacyRaw.unfinished.mark = 'WERKVERSIE-04';
+    const oldDraft = path.join(directory,'werkversie-04.opc.json');
+    await fs.writeFile(oldDraft,JSON.stringify(legacyRaw));
+    await importFile(oldDraft);
+    assert.equal(await field('depth').inputValue(),'');
+    assert.equal(await field('mark').inputValue(),'WERKVERSIE-04');
+    assert.ok(await field('export-ifc').isDisabled());
+    await field('depth').fill('1600');
+    delete legacyRaw.unfinished;
+    legacyRaw.manualProfile = Object.fromEntries(Object.entries(legacyRaw.element)
+      .map(([key,value])=>[key,typeof value === 'boolean' ? value : String(value)]));
+    legacyRaw.manualProfile.depth = '1950';
+    legacyRaw.manualProfile.channelProfile = 'v';
+    legacyRaw.manualProfile.channelWidth = '';
+    Object.assign(legacyRaw.element,{thicknessMode:'reference',slope:1,depth:2210});
+    await fs.writeFile(oldDraft,JSON.stringify(legacyRaw));
+    await importFile(oldDraft);
+    assert.equal(await field('thicknessMode').inputValue(),'reference');
+    await field('thicknessMode').selectOption('linear');
+    assert.equal(await field('depth').inputValue(),'1950');
+    assert.equal(await field('channelWidth').inputValue(),'');
+    assert.ok(await field('export-ifc').isDisabled());
+    assert.equal(await field('facadeRebate').isChecked(),false);
+    await field('channelWidth').fill('100');
+    assert.ok(await field('export-ifc').isEnabled());
     await field('depth').fill('1600');
 
     const second = await context.newPage();
