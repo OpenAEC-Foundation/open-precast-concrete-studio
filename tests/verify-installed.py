@@ -14,6 +14,7 @@ import struct
 import subprocess
 import tempfile
 import time
+from urllib.parse import urlsplit
 import urllib.request
 import winreg
 
@@ -21,9 +22,11 @@ import ifcopenshell
 import ifcopenshell.geom
 from ifcopenshell.util import element, shape
 from playwright.sync_api import sync_playwright
+import win32api
 import win32con
 import win32gui
 import win32process
+import win32security
 
 
 PRODUCT = "Open Precast Concrete Studio"
@@ -58,20 +61,45 @@ def assert_x64(executable):
         assert binary.read(6) == b"PE\0\0\x64\x86", "Expected an AMD64 Windows executable"
 
 
-def wait_for_webview(port, process):
+def wait_for_webview(port, process, profile):
     url = f"http://127.0.0.1:{port}"
+    loopback = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    runtimes = set()
+    for location in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"):
+        if location in os.environ:
+            application = Path(os.environ[location]) / "Microsoft/EdgeWebView/Application"
+            runtimes.update(file.parent.name for file in application.glob("*/msedgewebview2.exe"))
+    token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32con.TOKEN_QUERY)
+    try:
+        sid, _ = win32security.GetTokenInformation(token, win32security.TokenIntegrityLevel)
+        integrity = win32security.ConvertSidToStringSid(sid)
+    finally:
+        token.Close()
+    print(f"WebView2 {sorted(runtimes)}, test integrity {integrity}, app PID {process.pid}", flush=True)
+    targets = []
+    connection = "pending"
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"Installed app exited with {process.returncode}")
+            break
         try:
-            with urllib.request.urlopen(url + "/json/list", timeout=1) as response:
-                if any("tauri.localhost" in target["url"] for target in json.load(response)):
+            with loopback.open(url + "/json/list", timeout=1) as response:
+                targets = [urlsplit(target["url"]).hostname for target in json.load(response)]
+                connection = f"HTTP {response.status}"
+                if "tauri.localhost" in targets:
                     return url
-        except OSError:
-            pass
+        except OSError as exc:
+            connection = str(exc)
         time.sleep(.2)
-    raise TimeoutError("Installed WebView2 did not open the packaged editor")
+    windows = []
+    def app_window(hwnd, _):
+        if win32process.GetWindowThreadProcessId(hwnd)[1] == process.pid:
+            windows.append((win32gui.GetClassName(hwnd), win32gui.GetWindowText(hwnd)))
+        return True
+    win32gui.EnumWindows(app_window, None)
+    profile_entries = sorted(entry.name for entry in profile.glob("*"))
+    raise RuntimeError(f"Packaged WebView2 did not start. App exit={process.returncode}, windows={windows}, "
+                       f"loopback={connection}, CDP hosts={targets}, profile entries={profile_entries}")
 
 
 def save_dialog(pid, target):
@@ -148,12 +176,13 @@ def exercise(executable, folder):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    env = dict(os.environ, WEBVIEW2_USER_DATA_FOLDER=str(folder / "webview"),
+    profile = folder / "webview"
+    env = dict(os.environ, WEBVIEW2_USER_DATA_FOLDER=str(profile),
                WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=
                f"--remote-debugging-port={port} --remote-debugging-address=127.0.0.1")
     process = subprocess.Popen([str(executable)], cwd=executable.parent, env=env)
     try:
-        url = wait_for_webview(port, process)
+        url = wait_for_webview(port, process, profile)
         with sync_playwright() as driver:
             browser = driver.chromium.connect_over_cdp(url)
             page, = [p for context in browser.contexts for p in context.pages if "tauri.localhost" in p.url]

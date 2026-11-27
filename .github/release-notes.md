@@ -1,6 +1,6 @@
-# Open Precast Concrete Studio 0.4.0 voor Windows
+# Open Precast Concrete Studio 0.4.1 voor Windows
 
-Download **Open-Precast-Concrete-Studio-0.4.0-windows-x64-setup.exe**, voer de installer uit en open **Open Precast Concrete Studio** vanuit Start. De app installeert voor je eigen Windows-account.
+Download **Open-Precast-Concrete-Studio-0.4.1-windows-x64-setup.exe**, voer de installer uit en open **Open Precast Concrete Studio** vanuit Start. De app installeert voor je eigen Windows-account.
 
 De installer gebruikt Microsoft Edge WebView2 en downloadt de runtime als die op de computer ontbreekt. Deze release heeft een ongesigneerde installer. Windows kan de uitgever als onbekend tonen.
 

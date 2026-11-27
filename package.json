@@ -1,6 +1,6 @@
 {
   "name": "open-precast-concrete-studio",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "scripts": {
     "test": "node --test tests/model.test.cjs tests/project.test.cjs",
