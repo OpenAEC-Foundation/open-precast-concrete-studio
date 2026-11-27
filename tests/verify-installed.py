@@ -187,11 +187,11 @@ def draw_and_save(page, pid, folder, phase):
         target = folder / (MARK + extension)
         field(button).click()
         save_dialog(pid, target)
-        deadline = time.monotonic() + 30
-        while not (target.is_file() and target.stat().st_size):
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"Installed app did not write {target.name}. {field('status').inner_text()}")
-            time.sleep(.1)
+        # A Windows Save dialog can briefly create and remove an empty placeholder.
+        # All supported app versions confirm only after the final file is on disk.
+        saved = "IFC-bestand opgeslagen" if button == "export-ifc" else "Ontwerp opgeslagen"
+        page.get_by_text(saved, exact=True).wait_for()
+        assert target.stat().st_size > 0, f"Empty {target.name} after save confirmation"
         print(f"Windows Save dialog wrote {target.name}", flush=True)
 
 
