@@ -272,7 +272,14 @@ def exercise(executable, folder, profile, phase):
         url = wait_for_webview(port, process, profile)
         with sync_playwright() as driver:
             browser = driver.chromium.connect_over_cdp(url)
-            page, = [p for context in browser.contexts for p in context.pages if "tauri.localhost" in p.url]
+            # CDP can announce the WebView before Playwright has received its first navigation.
+            context, = browser.contexts
+            pages = context.pages
+            page = next((p for p in pages if urlsplit(p.url).hostname == "tauri.localhost"), None)
+            if page is None:
+                page = pages[0] if pages else context.wait_for_event("page", timeout=30000)
+                page.wait_for_url(lambda url: urlsplit(url).hostname == "tauri.localhost",
+                                  wait_until="commit", timeout=30000)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             draw_and_save(page, process.pid, folder, phase)
