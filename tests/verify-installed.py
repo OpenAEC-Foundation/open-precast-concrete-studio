@@ -406,6 +406,21 @@ def exercise(executable, folder, profile, phase):
                 page = pages[0] if pages else context.wait_for_event("page", timeout=30000)
                 page.wait_for_url(lambda url: urlsplit(url).hostname == "tauri.localhost",
                                   wait_until="commit", timeout=30000)
+            audit_buttons = phase in ("fresh", "upgraded", "controls")
+            if audit_buttons:
+                page.locator("#iso-view polygon").first.wait_for()
+                page.evaluate("""() => {
+                    const key = button => button.id || (button.dataset.view && 'view-' + button.dataset.view);
+                    const buttons = Array.from(document.querySelectorAll('button'), key);
+                    if (buttons.some(id => !id) || new Set(buttons).size !== buttons.length)
+                        throw new Error('Each button needs a distinct ID or view name for the Windows interaction test.');
+                    const clicked = new Set();
+                    document.addEventListener('click', event => {
+                        const button = event.target.closest('button');
+                        if (button && event.isTrusted) clicked.add(key(button));
+                    }, true);
+                    window.buttonCoverage = () => ({buttons, clicked:[...clicked]});
+                }""")
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             if phase == "controls":
@@ -425,6 +440,8 @@ def exercise(executable, folder, profile, phase):
                     page.locator("#length").fill("3140")
                     assert page.locator("#volume-value").inner_text() == "0,674 m³"
             assert not errors, errors
+            if audit_buttons:
+                return page.evaluate("window.buttonCoverage()")
     finally:
         if process.poll() is None:
             def close_app(hwnd, _):
@@ -536,11 +553,18 @@ def main():
                 exercise(executable, baseline, profile, "baseline")
                 original_id = measure(baseline, False)
             executable, _ = install(installer, destination, version)
-            exercise(executable, folder, profile, "upgraded" if original_id else "fresh")
+            drawing_test = exercise(executable, folder, profile, "upgraded" if original_id else "fresh")
             measure(folder, True, original_id)
             controls = folder / "knopproef"
             controls.mkdir()
-            exercise(executable, controls, folder / "controls-profile", "controls")
+            design_test = exercise(executable, controls, folder / "controls-profile", "controls")
+            buttons = set(drawing_test["buttons"])
+            assert buttons == set(design_test["buttons"])
+            clicked = set(drawing_test["clicked"]) | set(design_test["clicked"])
+            assert buttons == clicked, f"Buttons missing from the installed app test: {sorted(buttons - clicked)}"
+            (controls / "knoppen.json").write_text(json.dumps(
+                {"knoppen":sorted(buttons), "aangeklikt":sorted(clicked)}, indent=2), encoding="utf-8")
+            print(f"All {len(buttons)} installed app buttons exercised", flush=True)
             if args.upgrade_from:
                 exercise(previous_executable, folder, profile, "rollback")
                 exercise(executable, folder, profile, "restored")
